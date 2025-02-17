@@ -160,12 +160,12 @@ REST_FRAMEWORK = {
 
 # JWT Config
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(hours=2),  # 2시간
-    'REFRESH_TOKEN_LIFETIME': timedelta(weeks=2),  # 2주
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),  # 2시간
+    'REFRESH_TOKEN_LIFETIME': timedelta(hours=2),  # 2주
     # True로 설정할 경우, refresh token을 보내면 새로운 access token과 refresh token이 반환된다.
-    "ROTATE_REFRESH_TOKENS": True,
+    "ROTATE_REFRESH_TOKENS": False,
     # True로 설정될 경우, 기존에 있던 refresh token은 blacklist가된다.
-    "BLACKLIST_AFTER_ROTATION": True,
+    "BLACKLIST_AFTER_ROTATION": False,
 }
 
 # Cache Config
