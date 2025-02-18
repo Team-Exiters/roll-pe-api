@@ -6,12 +6,15 @@ from user.serializers import UserViewSerializer
 
 class UserShowPaperSerializer(serializers.ModelSerializer):
 	hostName = serializers.SerializerMethodField()
+	theme = serializers.SerializerMethodField()
+
 	class Meta:
 		model = Paper
-		fields = ["id", "title", "viewStat", "receivingStat", "receivingDate", "hostName", "code"]
+		fields = ["id", "title", "viewStat", "receivingStat", "receivingDate", "hostName", "code", "theme"]
 	def get_hostName(self, paper):
 		return paper.hostFK.name
-
+	def get_theme(self, paper):
+		return QueryIndexSerializer(paper.themeFK).data
 
 class PaperCreateSerializer(serializers.ModelSerializer):
 	class Meta:
