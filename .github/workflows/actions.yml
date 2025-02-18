@@ -41,20 +41,20 @@ jobs:
       working-directory: ${{ env.project-working-directory }}
 
     - name: Run Django Test - Jeongmingz Part (Paper Application)
-      if: github.actor == 'Jeongmingz' && github.reqository == 'Jeongmingz/roll-pe-api'
+      if: github.actor == 'Jeongmingz' && github.repository == 'Jeongmingz/roll-pe-api'
       run: |
         python3 manage.py test paper
       working-directory: ${{ env.project-working-directory }}
 
 
     - name: Run Django Test - jjjheeee Part (User Application)
-      if: github.actor == 'jjjheeee' && github.reqository == 'jjjheeee/roll-pe-api'
+      if: github.actor == 'jjjheeee' && github.repository == 'jjjheeee/roll-pe-api'
       run: |
         python3 manage.py test user
       working-directory: ${{ env.project-working-directory }}
 
     - name: Run Django Test - chanung-ki Part (Heart Application)
-      if: github.actor == 'chanung-ki' && github.reqository == 'chanung-ki/roll-pe-api'
+      if: github.actor == 'chanung-ki' && github.repository == 'chanung-ki/roll-pe-api'
       run: |
         python3 manage.py test heart
       working-directory: ${{ env.project-working-directory }}
