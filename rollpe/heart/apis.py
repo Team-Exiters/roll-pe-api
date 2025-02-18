@@ -106,9 +106,13 @@ class HeartAPI(APIView):
             return Response(status=471)
         
         validated_data['userFK'] = request.user.id
-        serializer.create(validated_data)
+        heart_instance = serializer.create(validated_data)
+        read_serializer = HeartReadSerializer(Heart.objects.get(pk=heart_instance.id))
         
-        return Response(status=201)
+        return Response(
+            data=read_serializer.data,
+            status=201
+        )
     
     
     def patch(self, request):
@@ -164,8 +168,10 @@ class HeartAPI(APIView):
         except Heart.DoesNotExist:
             return Response(status=404)
         
-        if not is_host(request.user, heart_instance.paperFK):
-            return Response(status=470)
+        # 작성자 검증
+        if not heart_instance.userFK == request.user:
+            if not is_host(request.user, heart_instance.paperFK):
+                return Response(status=470)
         
         heart_instance.delete()
         
