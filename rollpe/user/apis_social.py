@@ -11,11 +11,12 @@ from .models import User
 
 import requests
 
-@api_view(['GET'])
+# @api_view(['GET'])
+@api_view(['POST'])
 def social_login(request, provider):
 
-    # code = request.data.get('code')
-    code = request.GET.get('code')
+    code = request.data.get('code')
+    # code = request.GET.get('code')
     
     match provider:
 
@@ -83,6 +84,7 @@ def kakao_login(request, code):
         user.set_unusable_password()  # 비밀번호 없이 로그인 불가하도록 설정
         identify_token = create_idenfy_number(request)
         user.identifyCode = identify_token
+        user.provider = "kakao"
         user.save()
     
     return user
