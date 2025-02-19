@@ -82,5 +82,5 @@ class UserViewSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = (
-            'code', 'name', 'email', 'birth', 'sex', 'phoneNumber', 'createdAt'
+            'identifyCode', 'name'
         )

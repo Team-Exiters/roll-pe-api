@@ -16,13 +16,14 @@ import requests
 def social_login(request, provider):
 
     code = request.data.get('code')
+    access = request.data.get('accessToken')
     # code = request.GET.get('code')
     
     match provider:
 
         case "kakao":
             
-            user_instance = kakao_login(request,code)
+            user_instance = kakao_login(request, code, access)
         
         case "google":
 
@@ -46,25 +47,29 @@ def get_tokens_for_user(user):
         'access': str(refresh.access_token),
     }
 
-def kakao_login(request, code):
-    client_id = return_env_value("SOCIAL_AUTH_KAKAO_CLIENT_ID")
+def kakao_login(request, code, access):
 
-    call_back_url = f"http://localhost:8000/api/user/social/login/kakao"
+    if not access:
+        client_id = return_env_value("SOCIAL_AUTH_KAKAO_CLIENT_ID")
 
-    get_kakao_token = requests.post(
-        "https://kauth.kakao.com/oauth/token",
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-        data={
-            "grant_type": "authorization_code",
-            "client_id": client_id,
-            "redirect_uri": call_back_url,
-            "code": code
-        },
-    )
-    kakao_token = get_kakao_token.json()
+        call_back_url = f"http://localhost:8000/api/user/social/login/kakao"
 
-    access_token = kakao_token.get("access_token")
+        get_kakao_token = requests.post(
+            "https://kauth.kakao.com/oauth/token",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            data={
+                "grant_type": "authorization_code",
+                "client_id": client_id,
+                "redirect_uri": call_back_url,
+                "code": code
+            },
+        )
+        kakao_token = get_kakao_token.json()
 
+        access_token = kakao_token.get("access_token")
+    else:
+        access_token = access
+        
     user_kakao_account = requests.get(
         "https://kapi.kakao.com/v2/user/me",
         headers={"Authorization": f"Bearer {access_token}"},

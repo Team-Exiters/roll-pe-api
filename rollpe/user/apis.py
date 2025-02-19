@@ -1,19 +1,21 @@
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.renderers import TemplateHTMLRenderer
 from rest_framework.views import APIView
 from rest_framework import permissions
 
+from django.db.models import Q
 from django.shortcuts import redirect, get_object_or_404
 from django.conf import settings
 
 from utils.response import Response
 from utils.functions import verify_email_token, generate_send_email, create_idenfy_number
 
-from user.serializers import UserSerializer, CustomTokenObtainPairSerializer
+from user.serializers import UserSerializer, CustomTokenObtainPairSerializer, UserViewSerializer
 from user.models import User
 
 from paper.models import Paper
@@ -226,3 +228,21 @@ def receiver_is_me_api(request):
     }
     
     return Response(data=data, status=200)
+
+@api_view(['GET'])
+# @permission_classes([IsAuthenticated])
+def search_user_name(request):
+
+    paginator = PageNumberPagination()
+
+    user_name_code = request.GET.get("nameCode")
+
+    users = User.objects.filter(Q(name__icontains=user_name_code) | Q(provider__icontains=user_name_code))
+    if not users:
+        return Response(msg="사용자를 찾을 수 없습니다.",status=404)
+    
+    page = paginator.paginate_queryset(users, request)
+    serializer = UserViewSerializer(page, many=True)
+    data = paginator.get_paginated_response(serializer.data).data
+    
+    return Response(data=data,status=200)
