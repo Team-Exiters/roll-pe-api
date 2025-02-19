@@ -16,6 +16,18 @@ class UserPaperAPI(APIView):
 	pagination_class = PageNumberPagination
 
 	def get(self, request):
+		type = request.GET.get("type", "all")
+		print(type)
+
+		# TODO hot한 롤페의 기준을 정해야 한다.
+		if type == "hot":
+			queryset = Paper.objects.all().order_by('-createdAt')[:6]
+			return Response(
+				data=UserShowPaperSerializer(queryset, many=True).data,
+				status=status.HTTP_200_OK
+				)
+
+
 		queryset = Paper.objects.all().order_by('-createdAt')
 		paginator = self.pagination_class()
 		page = paginator.paginate_queryset(queryset, request)  # <- 페이지 분할
