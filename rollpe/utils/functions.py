@@ -1,8 +1,15 @@
 import jwt
+import random
+import string
+
 from datetime import datetime, timedelta
+
 from django.conf import settings
 from django.core.cache import cache
 from django.core.mail import send_mail
+
+from user.models import User
+
 
 def generate_email_verification_token(email):
     payload = {
@@ -45,3 +52,13 @@ def generate_send_email(request, email, path_code):
         recipient_list=[email],
     )
     return
+
+def create_idenfy_number(request):
+
+    while True:
+        characters = string.ascii_letters + string.digits  # 영문 대소문자 + 숫자
+        code_num = ''.join(random.choices(characters, k=6))
+
+        # 중복 여부 확인
+        if not User.objects.filter(identifyCode=code_num).exists():
+            return code_num  # 중복이 없으면 반환

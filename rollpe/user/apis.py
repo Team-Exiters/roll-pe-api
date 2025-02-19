@@ -11,7 +11,7 @@ from django.shortcuts import redirect, get_object_or_404
 from django.conf import settings
 
 from utils.response import Response
-from utils.functions import verify_email_token, generate_send_email
+from utils.functions import verify_email_token, generate_send_email, create_idenfy_number
 
 from user.serializers import UserSerializer, CustomTokenObtainPairSerializer
 from user.models import User
@@ -107,7 +107,9 @@ class VerifyEmailAPI(APIView):
 
                 case "email":
                     user = get_object_or_404(User, email=user_email)
+                    identify_code = create_idenfy_number(request)
                     user.is_active = True
+                    user.identifyCode = identify_code
                     user.save()
                     
                 case "password":
