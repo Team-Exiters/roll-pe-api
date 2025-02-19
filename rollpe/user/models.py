@@ -71,6 +71,16 @@ class User(AbstractBaseUser, PermissionsMixin, BaseTimeModel):
         editable=True,
         null=True
     )
+    identifyCode = models.CharField(
+        max_length=6,
+        null=True,
+        blank=True
+    )
+    provider = models.CharField(
+        max_length=15,
+        null=True,
+        blank=True
+    )
     
     objects = UserManager()
     USERNAME_FIELD = 'email'

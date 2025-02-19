@@ -42,6 +42,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         tokens["user"] = {
             "name": user_instance.name,
             "email": user_instance.email,
+            "identifyCode": user_instance.identifyCode,
         }
 
         return Response(data=tokens, status=201)
@@ -63,6 +64,7 @@ class UserSerializer(serializers.ModelSerializer):
         is_test = validated_data.pop('is_test', False)
 
         user = User.objects.create(**validated_data)
+        # user = User.objects.create_user(password=password, **validated_data)
         user.set_password(password)
 
         if is_test:  # 테스트 환경인 경우
