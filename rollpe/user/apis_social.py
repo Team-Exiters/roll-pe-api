@@ -10,7 +10,6 @@ from utils.functions import create_idenfy_number
 from .models import User
 
 import jwt
-from jwt.algorithms import RSAAlgorithm
 import requests
 
 # @api_view(['GET'])
@@ -165,7 +164,7 @@ def decode_apple_identity_token(identity_token):
             return None
 
         # 공개 키를 사용하여 JWT 검증
-        public_key = RSAAlgorithm.from_jwk(key)
+        public_key = jwt.algorithms.RSAAlgorithm.from_jwk(key)
         decoded_token = jwt.decode(identity_token, public_key, algorithms=["RS256"])
 
         # 'aud' 값 검증 (내 서비스의 client_id와 일치하는지 확인)
