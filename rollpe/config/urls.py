@@ -24,6 +24,6 @@ urlpatterns = [
     path('api/paper', include('paper.urls')),
     path('api/heart', include('heart.urls')),
     path('api/user', include('user.urls')),
+    path('api/engine', include('engine.urls')),
     path('api/index', QueryIndexAPI.as_view(), name="query_index"),
-
     ]
