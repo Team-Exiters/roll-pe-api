@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'paper',
     'heart',
     'utils',
+    'engine'
 ]
 
 MIDDLEWARE = [
@@ -86,6 +87,8 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 DATABASES = {
     'default': {
+        # 'ENGINE': 'django.db.backends.sqlite3',
+        # 'NAME': BASE_DIR / "db.sqlite3",  # For a Path object
         'ENGINE': 'django.db.backends.mysql',
         'NAME': return_env_value('DJANGO_DATABASE_NAME'),
         'USER': return_env_value('DJANGO_DATABASE_USER'),
