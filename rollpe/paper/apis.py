@@ -2,6 +2,7 @@ from django.contrib.auth.hashers import check_password, make_password
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
 
+from heart.models import Heart
 from paper.serializer import UserShowPaperSerializer, PaperCreateSerializer, PaperSerializer, QueryIndexSerializer, \
 	QueryIndexCreateSerializer
 from user.models import User
@@ -17,7 +18,6 @@ class UserPaperAPI(APIView):
 
 	def get(self, request):
 		type = request.GET.get("type", "all")
-		print(type)
 
 		# TODO hot한 롤페의 기준을 정해야 한다.
 		if type == "hot":
@@ -70,6 +70,51 @@ class UserPaperAPI(APIView):
 			else:
 				return Response(status=471)
 
+
+class MyPagePaperAPI(APIView):
+	"""
+	count
+	1. 내가 작성한(호스트가 나)인 롤페
+
+	card
+	1. 내 롤페(내가 작성한(호스트)한 + 받은 롤페)
+	2. 내가 참여한 롤페
+	"""
+
+	def get(self, request):
+		user = request.user
+		if user.is_anonymous:
+			return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+
+
+		if request.GET.get("type") == 'main':
+			host_paper = len(Paper.objects.filter(hostFK=user))
+			heart = len(Heart.objects.filter(userFK=user))
+
+			data = {
+				"host": host_paper,
+				"heart":heart
+				}
+			return Response(data=data, status=status.HTTP_200_OK)
+
+		elif request.GET.get("type") == 'my':
+			receiving_paper = Paper.objects.filter(receiverFK=user, receivingStat=1)
+			data = UserShowPaperSerializer(receiving_paper, many=True).data
+			return Response(data=data, status=status.HTTP_200_OK)
+
+		elif request.GET.get("type") == 'inviting':
+			my_paper = Paper.objects.filter(invitingUser=user)
+			data = UserShowPaperSerializer(my_paper, many=True).data
+			return Response(data=data, status=status.HTTP_200_OK)
+
+		else:
+			return Response(
+				msg="Query Param type은 main, my, inviting이 존재합니다.",
+				status=status.HTTP_400_BAD_REQUEST
+				)
+
+		return Response(status=200)
 
 
 class PaperAPI(APIView):
