@@ -42,13 +42,13 @@ def logout_api(request):
     refresh_token = request.data.get("refresh")
 
     if not refresh_token:
-        return Response(msg="Refresh token이 없습니다.", status=400)
+        return Response(msg="Refresh token이 없습니다.", status=403)
 
     try:
         token = RefreshToken(refresh_token)
         token.blacklist()  
     except TokenError as e:
-        return Response(msg="유효한 Refresh Token이 아닙니다. ", status=400)
+        return Response(msg="유효한 Refresh Token이 아닙니다. ", status=403)
 
     return Response(msg="로그아웃 되었습니다.", status=200)
 
