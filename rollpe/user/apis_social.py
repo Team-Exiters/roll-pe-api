@@ -68,7 +68,8 @@ def kakao_login(request, code, access):
     if not access:
         client_id = return_env_value("SOCIAL_AUTH_KAKAO_CLIENT_ID")
 
-        call_back_url = f"https://dev.popping.world/api/user/social/login/kakao"
+        # call_back_url = f"https://dev.popping.world/api/user/social/login/kakao"
+        call_back_url = f"http://localhost:3000/oauth/callback/kakao"
         # call_back_url = f"http://localhost:8000/api/user/social/login/kakao"
 
         get_kakao_token = requests.post(
