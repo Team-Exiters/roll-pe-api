@@ -29,7 +29,7 @@ def social_login(request, provider):
         
         case "google":
 
-            user_instance, created = google_login(request, code)
+            user_instance, created = google_login(request, code, access)
         
         case "apple":
 
@@ -68,7 +68,8 @@ def kakao_login(request, code, access):
     if not access:
         client_id = return_env_value("SOCIAL_AUTH_KAKAO_CLIENT_ID")
 
-        call_back_url = f"http://localhost:8000/api/user/social/login/kakao"
+        call_back_url = f"https://dev.popping.world/api/user/social/login/kakao"
+        # call_back_url = f"http://localhost:8000/api/user/social/login/kakao"
 
         get_kakao_token = requests.post(
             "https://kauth.kakao.com/oauth/token",
@@ -103,7 +104,7 @@ def kakao_login(request, code, access):
 
     return user, created
 
-def google_login(request, code):
+def google_login(request, code, access):
 
     return
 
