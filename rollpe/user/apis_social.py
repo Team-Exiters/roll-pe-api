@@ -107,7 +107,46 @@ def kakao_login(request, code, access):
 
 def google_login(request, code, access):
 
-    return
+    state = return_env_value("GOOGLE_STATE")
+    client_secret = return_env_value("GOOGLE_OAUTH_CLIENT_ID")
+
+    if code: 
+        client_id = return_env_value("WEB_GOOGLE_OAUTH_CLIENT_KEY")
+        access_token = code
+
+    else:
+        client_id = return_env_value("IOS_GOOGLE_OAUTH_CLIENT_KEY")
+        access_token = access
+    # http://localhost:8000/api/user/social-google
+    # call_back_url = f"http://localhost:8000/api/user/social/login/google"
+    call_back_url = f"http://localhost:3000/oauth/callback/google"
+
+    get_google_token = requests.post(
+        "https://oauth2.googleapis.com/token", 
+        data = {
+        'client_id': client_id,
+        'client_secret': client_secret,
+        'code': code,
+        'grant_type': 'authorization_code',
+        'redirect_uri': call_back_url,
+        'state': state
+        }
+    )
+    access_token = get_google_token.json().get("access_token")
+
+    user_data = requests.get(f"https://www.googleapis.com/oauth2/v3/userinfo?access_token={access_token}")
+    user_data = user_data.json()
+
+    user_name = user_data.get('name')  # 사용자 이름은 'name' 필드에 있음
+    user_email = user_data.get('email')  # 이메일은 'email' 필드에 있음
+
+    # 가져온 이메일로 사용자 생성 및 조회후 return user_instance 
+    user, created = User.objects.get_or_create(
+        email=user_email,
+        defaults={'name': user_name,'email':user_email}
+    )
+
+    return user, created
 
 def apple_login(request, code, access):
 
@@ -134,16 +173,6 @@ def apple_login(request, code, access):
     )
 
     return user, created
-
-# def get_apple_public_keys():
-# #     """애플의 공개 키를 가져오는 함수"""
-#     public_key_url = return_env_value("APPLE_PUBLIC_KEYS_URL")
-#     response = requests.get(public_key_url)
-
-#     if response.status_code != 200:
-#         return None
-    
-#     return response.json().get("keys")
 
 def decode_apple_identity_token(identity_token):
     """애플 JWT(identityToken) 검증"""
@@ -177,7 +206,17 @@ def decode_apple_identity_token(identity_token):
 class KakaoLoginView(APIView):
     def get(self, request):
         client_id = return_env_value("SOCIAL_AUTH_KAKAO_CLIENT_ID")
-        redirect_uri = "http://localhost:8000/api/user/social/login/kakao"
+        # redirect_uri = "http://localhost:8000/api/user/social/login/kakao"
+        redirect_uri = f"http://localhost:3000/oauth/callback/kakao"
         return redirect(
             f"https://kauth.kakao.com/oauth/authorize?client_id={client_id}&redirect_uri={redirect_uri}&response_type=code"
         )
+
+class GoogleLoginView(APIView):
+    def get(self, request):
+        client_id = return_env_value("WEB_GOOGLE_OAUTH_CLIENT_KEY")
+        # 이메일과 프로필 정보를 요청하는 scope 설정
+        scope = "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile"
+        redirect_uri = "http://localhost:8000/api/user/social/login/google"
+        return redirect(f"https://accounts.google.com/o/oauth2/v2/auth?client_id={client_id}&response_type=code&redirect_uri={redirect_uri}&scope={scope}")
+
