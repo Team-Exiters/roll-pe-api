@@ -296,7 +296,7 @@ class PaperPasswordAPI(APIView):
 
 class QueryIndexAPI(APIView):
 	def get(self, request):
-		query_type = request.data.get("type", "all").upper()
+		query_type = request.GET.get("type", "all").upper()
 
 		if query_type == "ALL":
 			queryset = QueryIndexTable.objects.all()
