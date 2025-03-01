@@ -40,6 +40,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
         # 추가 사용자 정보 포함 (선택)
         tokens["user"] = {
+            "id": user_instance.id,
             "name": user_instance.name,
             "email": user_instance.email,
             "identifyCode": user_instance.identifyCode,
@@ -82,5 +83,5 @@ class UserViewSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = (
-            'identifyCode', 'name'
+            'id', 'identifyCode', 'name'
         )
