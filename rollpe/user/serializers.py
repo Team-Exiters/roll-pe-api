@@ -44,6 +44,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             "name": user_instance.name,
             "email": user_instance.email,
             "identifyCode": user_instance.identifyCode,
+            "provider": user_instance.provider
         }
 
         return Response(data=tokens, status=201)
