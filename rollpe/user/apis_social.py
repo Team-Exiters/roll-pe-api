@@ -9,6 +9,9 @@ from utils.response import Response
 from utils.functions import create_idenfy_number
 from .models import User
 
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+
 import jwt
 from jwt import PyJWKClient
 import requests
@@ -30,7 +33,7 @@ def social_login(request, provider):
         case "google":
 
             user_instance, created = google_login(request, code, access)
-        
+
         case "apple":
 
             user_instance, created = apple_login(request, code, access)
@@ -49,9 +52,11 @@ def social_login(request, provider):
     tokens = get_tokens_for_user(user_instance)
 
     tokens["user"] = {
+        "id": user_instance.id,
         "name": user_instance.name,
         "email": user_instance.email,
         "identifyCode": user_instance.identifyCode,
+        "provider": user_instance.provider
     }
 
     return Response(data=tokens, status=200)
@@ -96,7 +101,7 @@ def kakao_login(request, code, access):
     # user_kakao_account에서email 가져오기
     user_name = user_kakao_account['kakao_account']['profile']['nickname']
     user_email = user_kakao_account['kakao_account']['email']
-
+    
     # 가져온 이메일로 사용자 생성 및 조회후 return user_instance 
     user, created = User.objects.get_or_create(
         email=user_email,
@@ -107,35 +112,39 @@ def kakao_login(request, code, access):
 
 def google_login(request, code, access):
 
-    state = return_env_value("GOOGLE_STATE")
-    client_secret = return_env_value("GOOGLE_OAUTH_CLIENT_ID")
 
     if code: 
+        # 웹에서
+        client_secret = return_env_value("GOOGLE_OAUTH_CLIENT_ID")
+        state = return_env_value("GOOGLE_STATE")
         client_id = return_env_value("WEB_GOOGLE_OAUTH_CLIENT_KEY")
-        access_token = code
+
+        # http://localhost:8000/api/user/social-google
+        call_back_url = f"http://localhost:3000/oauth/callback/google"
+        # call_back_url = f"http://localhost:8000/api/user/social/login/google"
+
+        get_google_token = requests.post(
+            "https://oauth2.googleapis.com/token", 
+            data = {
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'code': code,
+            'grant_type': 'authorization_code',
+            'redirect_uri': call_back_url,
+            'state': state
+            }
+        )
+        access_token = get_google_token.json().get("access_token")
+
+        user_data = requests.get(f"https://www.googleapis.com/oauth2/v3/userinfo?access_token={access_token}")
+        user_data = user_data.json()
 
     else:
+        # 앱에서
+        google_id_token = access
         client_id = return_env_value("IOS_GOOGLE_OAUTH_CLIENT_KEY")
-        access_token = access
-    # http://localhost:8000/api/user/social-google
-    # call_back_url = f"http://localhost:8000/api/user/social/login/google"
-    call_back_url = f"http://localhost:3000/oauth/callback/google"
-
-    get_google_token = requests.post(
-        "https://oauth2.googleapis.com/token", 
-        data = {
-        'client_id': client_id,
-        'client_secret': client_secret,
-        'code': code,
-        'grant_type': 'authorization_code',
-        'redirect_uri': call_back_url,
-        'state': state
-        }
-    )
-    access_token = get_google_token.json().get("access_token")
-
-    user_data = requests.get(f"https://www.googleapis.com/oauth2/v3/userinfo?access_token={access_token}")
-    user_data = user_data.json()
+        decoded_token = id_token.verify_oauth2_token(google_id_token, google_requests.Request(), client_id)
+        user_data = decoded_token
 
     user_name = user_data.get('name')  # 사용자 이름은 'name' 필드에 있음
     user_email = user_data.get('email')  # 이메일은 'email' 필드에 있음
@@ -147,6 +156,7 @@ def google_login(request, code, access):
     )
 
     return user, created
+
 
 def apple_login(request, code, access):
 
