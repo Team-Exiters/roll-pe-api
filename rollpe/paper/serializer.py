@@ -5,16 +5,42 @@ from user.serializers import UserViewSerializer
 
 
 class UserShowPaperSerializer(serializers.ModelSerializer):
-	hostName = serializers.SerializerMethodField()
+	host = serializers.SerializerMethodField()
 	theme = serializers.SerializerMethodField()
+	size = serializers.SerializerMethodField()
+	ratio = serializers.SerializerMethodField()
+	receiver = serializers.SerializerMethodField()
 
 	class Meta:
 		model = Paper
-		fields = ["id", "title", "viewStat", "receivingStat", "receivingDate", "hostName", "code", "theme"]
-	def get_hostName(self, paper):
-		return paper.hostFK.name
+		fields = [
+			"id",
+			"code",
+			"title",
+			"host",
+			'receiver',
+			"viewStat",
+			"receivingDate",
+			"receivingStat",
+			"theme",
+			'size',
+			'ratio',
+			'createdAt',
+			]
+	def get_host(self, paper):
+		return UserViewSerializer(paper.hostFK).data
+
+	def get_receiver(self, paper):
+		return UserViewSerializer(paper.receiverFK).data
+
 	def get_theme(self, paper):
-		return QueryIndexSerializer(paper.themeFK).data
+		return paper.themeFK.name
+
+	def get_size(self, paper):
+		return paper.sizeFK.name
+
+	def get_ratio(self, paper):
+		return paper.ratioFK.name
 
 class PaperCreateSerializer(serializers.ModelSerializer):
 	class Meta:
