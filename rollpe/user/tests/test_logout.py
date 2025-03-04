@@ -41,9 +41,9 @@ class LogoutAPITest(APITestCase):
     """ 잘못된 리프레시 토근 사용으로 로그아웃 실패 """
     def test_logout_invalid_token(self):
         response = self.client.post(self.logout_url, {"refresh": "invalidToken"})
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         
     """ 리프레시 토큰이 없는 경우 로그아웃 실패 """
     def test_logout_no_token(self):
         response = self.client.post(self.logout_url, {})
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)

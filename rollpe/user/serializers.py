@@ -18,7 +18,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         if not user_instance:
             return Response(
                 msg="사용자를 찾을 수 없습니다.",
-                status=400
+                status=404
             )
 
         # 비밀번호 확인
@@ -26,13 +26,13 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         if not user_instance.check_password(password):
             return Response(
                 msg="비밀번호가 틀렸습니다.",
-                status=400
+                status=401
             )
 
         if not user_instance.is_active:
             return Response(
                 msg="이메일 인증을 진행해주세요.",
-                status=400
+                status=403
             )
 
         # 기본 JWT 토큰 생성 로직 실행
@@ -40,9 +40,11 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
         # 추가 사용자 정보 포함 (선택)
         tokens["user"] = {
+            "id": user_instance.id,
             "name": user_instance.name,
             "email": user_instance.email,
             "identifyCode": user_instance.identifyCode,
+            "provider": user_instance.provider
         }
 
         return Response(data=tokens, status=201)
