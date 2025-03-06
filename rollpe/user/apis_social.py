@@ -157,7 +157,6 @@ def google_login(request, code, access):
 
     return user, created
 
-
 def apple_login(request, code, access):
 
     # web에서 넘어오는 인가코드 (web에서 ios로그인 구현시 추가 구현 필요)

@@ -11,7 +11,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
 from pathlib import Path
-
+import uuid
 from utils.env import return_env_value
 from datetime import timedelta
 
@@ -96,8 +96,10 @@ DATABASES = {
         'HOST': return_env_value('DJANGO_DATABASE_HOST'),
         'PORT': return_env_value('DJANGO_DATABASE_PORT'),
         # 'TEST': {
+        #     # 'ENGINE': 'django.db.backends.mysql',
         #     'ENGINE': 'django.db.backends.sqlite3',
-        #     'NAME': 'test_' + return_env_value('DJANGO_DATABASE_NAME'),  # 테스트용 DB 이름
+        #     'NAME': f"test_{uuid.uuid4().hex}",
+        #     # 'NAME': 'test_' + return_env_value('DJANGO_DATABASE_NAME'),  # 테스트용 DB 이름
         # },
     }
 }
@@ -163,8 +165,8 @@ REST_FRAMEWORK = {
 
 # JWT Config
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),  # 2시간
-    'REFRESH_TOKEN_LIFETIME': timedelta(hours=2),  # 2주
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=2),  # 2시간
+    'REFRESH_TOKEN_LIFETIME': timedelta(weeks=2),  # 2주
     # True로 설정할 경우, refresh token을 보내면 새로운 access token과 refresh token이 반환된다.
     "ROTATE_REFRESH_TOKENS": False,
     # True로 설정될 경우, 기존에 있던 refresh token은 blacklist가된다.
