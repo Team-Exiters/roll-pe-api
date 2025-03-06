@@ -1,3 +1,4 @@
+from django.core.handlers.asgi import ASGIRequest
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 
@@ -246,3 +247,18 @@ def search_user_name(request):
     data = paginator.get_paginated_response(serializer.data).data
     
     return Response(data=data,status=200)
+
+
+@api_view(['POST'])
+def user_password_check(request):
+    password = request.data.get("password", None)
+    user = request.user
+
+    if user.is_anonymous:
+        return Response(status=401)
+
+    if password is None:
+        return Response(status=400, msg="패스워드가 없습니다.")
+
+
+    return Response(status=200, data={"status": user.check_password(password)})
