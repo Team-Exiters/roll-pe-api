@@ -268,12 +268,12 @@ def change_user_password(request):
 
     refresh_token = request.data.get("refresh")
 
-    password = request.data['password']
+    # password = request.data['password']
     new_password = request.data['newPassword']
     
     # 현재 비밀번호 확인
-    if not check_password(password, request.user.password):
-        return Response(msg="현재 비밀번호가 틀렸습니다.", status=400)
+    # if not check_password(password, request.user.password):
+    #     return Response(msg="현재 비밀번호가 틀렸습니다.", status=400)
     
     # 현재와 변경된 비밀변호가 같음
     if check_password(new_password, request.user.password):
