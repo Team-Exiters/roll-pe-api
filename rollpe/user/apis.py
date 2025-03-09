@@ -12,6 +12,7 @@ from rest_framework import permissions
 from django.db.models import Q
 from django.shortcuts import redirect, get_object_or_404
 from django.conf import settings
+from django.contrib.auth.hashers import check_password
 
 from utils.response import Response
 from utils.functions import verify_email_token, generate_send_email, create_idenfy_number
@@ -137,40 +138,34 @@ class ForgotPasswordAPI(APIView):
 
     permission_classes = [permissions.AllowAny]
 
-    def get_permissions(self):
-
-        if self.request.method == 'GET':
-            return [AllowAny()]  # GET 요청은 모든 사용자 허용
-        
-        elif self.request.method == 'POST':
-            return [IsAuthenticated()]  # POST 요청은 인증된 사용자만 허용
-        
-        elif self.request.method == 'PATCH':
-            return [IsAuthenticated()]  # PATCH 요청은 인증된 사용자만 허용
-        
-        return super().get_permissions()
-    
     def post(self, request):
         email = request.data['email']
-        if not User.objects.filter(email=email).exists():
+
+        user_query = User.objects.filter(email=email)
+
+        if not user_query.exists():
             return Response(msg="회원가입되지 않은 이메일입니다.", status=400)
+        
+        provider = user_query.get().provider
+        if provider is not None:
+            return Response(msg=f"이미 {provider}로 회원가입된 이메일입니다.", status=400)
         
         generate_send_email(request, email, path_code="password")
         return Response(msg="비밀번호 변경 이메일이 전송되었습니다.", status=200)
 
     def patch(self, request):
-
+        user = request.user
         refresh_token = request.data.get("refresh")
 
-        password = request.data['newPassword']
+        new_password = request.data['newPassword']
         password_check = request.data['newPasswordCheck']
         
-        if password != password_check:
+        if new_password != password_check:
             return Response(msg="두 비밀번호가 일치하지 않습니다.", status=400)
         
         user = User.objects.get(email=request.user.email)
         
-        user.set_password(password)
+        user.set_password(new_password)
         user.save()
 
         # 리프레시 토큰 무효화 처리 (로그아웃)
@@ -180,9 +175,10 @@ class ForgotPasswordAPI(APIView):
                 token.blacklist()  
             except Exception as e:
                 return Response(msg="토큰 무효화 중 오류가 발생했습니다.", status=400)
+        else:
+            return Response(msg="토큰이 존재하지 않습니다.", status=400)
 
         return Response(msg="비밀번호 변경이 완료되었습니다. 다시 로그인해주세요.", status=200)
-
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -231,7 +227,7 @@ def receiver_is_me_api(request):
     return Response(data=data, status=200)
 
 @api_view(['GET'])
-# @permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated])
 def search_user_name(request):
 
     paginator = PageNumberPagination()
@@ -250,6 +246,7 @@ def search_user_name(request):
 
 
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def user_password_check(request):
     password = request.data.get("password", None)
     user = request.user
@@ -260,5 +257,42 @@ def user_password_check(request):
     if password is None:
         return Response(status=400, msg="패스워드가 없습니다.")
 
+    if user.check_password(password):
 
-    return Response(status=200, data={"status": user.check_password(password)})
+        return Response(status=200)
+    else:
+        return Response(status=400, msg="비밀번호가 일치하지 않습니다.")
+
+@api_view(['PATCH'])
+def change_user_password(request):
+
+    refresh_token = request.data.get("refresh")
+
+    password = request.data['password']
+    new_password = request.data['newPassword']
+    
+    # 현재 비밀번호 확인
+    if not check_password(password, request.user.password):
+        return Response(msg="현재 비밀번호가 틀렸습니다.", status=400)
+    
+    # 현재와 변경된 비밀변호가 같음
+    if check_password(new_password, request.user.password):
+        return Response(msg="현재 비밀번호와 새로운 비밀번호가 같습니다.", status=400)
+
+    request.user.set_password(new_password)
+    request.user.save()
+    
+    # 리프레시 토큰 무효화 처리 (로그아웃)
+    if refresh_token:
+        try:
+            token = RefreshToken(refresh_token)
+            token.blacklist()  
+        except Exception as e:
+            return Response(msg="토큰 무효화 중 오류가 발생했습니다.", status=400)
+    else:
+        return Response(msg="토큰이 존재하지 않습니다.", status=400)
+
+    return Response(msg="비밀번호 변경이 완료되었습니다. 다시 로그인해주세요.", status=200)
+
+# rollpe2025!
+# testpassword!
