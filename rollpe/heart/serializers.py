@@ -4,7 +4,34 @@ from django.utils.timezone import localtime
 from user.models import User
 from paper.models import Paper, QueryIndexTable
 from heart.models import Heart
+from user.serializers import UserViewSerializer
 
+# class HeartReadSerializer(serializers.ModelSerializer):
+    
+#     def __init__(self, *args, **kwargs):
+#         self.is_public = kwargs.pop('is_public', True)
+#         self.my_pk = kwargs.pop('my_pk', 0)
+#         super().__init__(*args, **kwargs)
+
+#     userName = serializers.CharField(source='userFK.name')
+#     rollingPaperName = serializers.CharField(source='paperFK.title')
+#     createdAt = serializers.SerializerMethodField()
+#     blur=serializers.SerializerMethodField()
+#     color=serializers.CharField(source='colorFK.name')
+
+#     class Meta:
+#         model = Heart
+#         fields = ('id', 'userName', 'rollingPaperName', 'context', 'danger', 'createdAt', 'location', 'blur', 'code', 'color')
+       
+#     def get_createdAt(self, obj):
+#         return localtime(obj.createdAt).strftime('%Y.%m.%d')    
+    
+#     def get_blur(self, obj):
+#         if self.is_public or self.my_pk == 0 or self.my_pk >= obj.id:
+#             return False
+#         return True
+    
+    
 class HeartReadSerializer(serializers.ModelSerializer):
     
     def __init__(self, *args, **kwargs):
@@ -12,23 +39,34 @@ class HeartReadSerializer(serializers.ModelSerializer):
         self.my_pk = kwargs.pop('my_pk', 0)
         super().__init__(*args, **kwargs)
 
-    userName = serializers.CharField(source='userFK.name')
-    rollingPaperName = serializers.CharField(source='paperFK.title')
+    # userName = serializers.CharField(source='userFK.name')
+    # rollingPaperName = serializers.CharField(source='paperFK.title')
+    # createdAt = serializers.SerializerMethodField()
+    # blur=serializers.SerializerMethodField()
+    
+    index = serializers.IntegerField(source='location')
+    author = UserViewSerializer(source='userFK')
+    content = serializers.CharField(source='context')
     createdAt = serializers.SerializerMethodField()
-    blur=serializers.SerializerMethodField()
     color=serializers.CharField(source='colorFK.name')
+    version = serializers.SerializerMethodField()
+    
 
     class Meta:
         model = Heart
-        fields = ('id', 'userName', 'rollingPaperName', 'context', 'danger', 'createdAt', 'location', 'blur', 'code', 'color')
+        fields = ('id', 'index', 'author', 'content', 'createdAt', 'color', 'version')
+        depth = 1
        
     def get_createdAt(self, obj):
-        return localtime(obj.createdAt).strftime('%Y.%m.%d')    
+        return localtime(obj.createdAt).strftime('%Y.%m.%d')  
+      
+    def get_version(self, obj):
+        return ''
     
-    def get_blur(self, obj):
-        if self.is_public or self.my_pk == 0 or self.my_pk >= obj.id:
-            return False
-        return True
+    # def get_blur(self, obj):
+    #     if self.is_public or self.my_pk == 0 or self.my_pk >= obj.id:
+    #         return False
+    #     return True
     
 
     
