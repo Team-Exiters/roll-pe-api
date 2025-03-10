@@ -154,29 +154,14 @@ class ForgotPasswordAPI(APIView):
         return Response(msg="비밀번호 변경 이메일이 전송되었습니다.", status=200)
 
     def patch(self, request):
-        user = request.user
-        refresh_token = request.data.get("refresh")
 
+        identify_code = request.data['identifyCode']
         new_password = request.data['newPassword']
-        password_check = request.data['newPasswordCheck']
-        
-        if new_password != password_check:
-            return Response(msg="두 비밀번호가 일치하지 않습니다.", status=400)
-        
-        user = User.objects.get(email=request.user.email)
+
+        user = User.objects.get(identifyCode=identify_code)
         
         user.set_password(new_password)
         user.save()
-
-        # 리프레시 토큰 무효화 처리 (로그아웃)
-        if refresh_token:
-            try:
-                token = RefreshToken(refresh_token)
-                token.blacklist()  
-            except Exception as e:
-                return Response(msg="토큰 무효화 중 오류가 발생했습니다.", status=400)
-        else:
-            return Response(msg="토큰이 존재하지 않습니다.", status=400)
 
         return Response(msg="비밀번호 변경이 완료되었습니다. 다시 로그인해주세요.", status=200)
 

@@ -203,3 +203,5 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
 ]
 CORS_ALLOW_CREDENTIALS = True
+
+BASE_DOMAIN = 'http://localhost:3000'
