@@ -41,16 +41,32 @@ def verify_email_token(token):
         raise ValueError("유효하지 않은 링크입니다. 재전송 버튼을 눌러주세요.") 
 
 def generate_send_email(request, email, path_code):
-    token = generate_email_verification_token(email)
-    activation_url = f"{request.scheme}://{request.get_host()}/api/user/verify-email?path_code={path_code}&token={token}"
 
-    # 이메일 발송
-    send_mail(
-        subject="이메일 인증을 완료해주세요.",
-        message=f"다음 링크를 클릭하여 이메일 인증을 완료하세요: {activation_url}",
-        from_email=settings.EMAIL_HOST_USER,
-        recipient_list=[email],
-    )
+
+    match path_code:
+        case "email":
+            token = generate_email_verification_token(email)
+            activation_url = f"{request.scheme}://{request.get_host()}/api/user/verify-email?path_code={path_code}&token={token}"
+
+            # 이메일 발송
+            send_mail(
+                subject="이메일 인증을 완료해주세요.",
+                message=f"다음 링크를 클릭하여 이메일 인증을 완료하세요: {activation_url}",
+                from_email=settings.EMAIL_HOST_USER,
+                recipient_list=[email],
+            )
+        case "password":
+            # email로 유저의 identity code 가져와서 링크에 쿼리파람으로 넣어주기
+            identify_code = User.objects.filter(email=email).values_list('identifyCode', flat=True).first()
+            activation_url = f"{settings.BASE_DOMAIN}/forgot-password?identifyCode={identify_code}"
+
+            # 이메일 발송
+            send_mail(
+                subject="비밀번호 찾기",
+                message=f"다음 링크를 클릭하여 비밀번호를 변경하세요: {activation_url}",
+                from_email=settings.EMAIL_HOST_USER,
+                recipient_list=[email],
+            )
     return
 
 def create_idenfy_number(request):
