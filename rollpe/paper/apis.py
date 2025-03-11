@@ -27,14 +27,12 @@ class UserPaperAPI(APIView):
 				status=status.HTTP_200_OK
 				)
 
-
 		queryset = Paper.objects.all().order_by('-createdAt')
-		paginator = self.pagination_class()
-		page = paginator.paginate_queryset(queryset, request)  # <- 페이지 분할
-
 		if queryset.count() == 0:
 			return Response(status=status.HTTP_404_NOT_FOUND)
 
+		paginator = self.pagination_class()
+		page = paginator.paginate_queryset(queryset, request)  # <- 페이지 분할
 		serializer = UserShowPaperSerializer(page, many=True)
 
 		return Response(
@@ -85,7 +83,6 @@ class MyPagePaperAPI(APIView):
 		user = request.user
 		if user.is_anonymous:
 			return Response(status=status.HTTP_401_UNAUTHORIZED)
-
 
 
 		if request.GET.get("type") == 'main':
@@ -140,7 +137,7 @@ class PaperAPI(APIView):
 		except Paper.DoesNotExist as e:
 			return Response(msg=str(e), status=status.HTTP_404_NOT_FOUND)
 
-		response = PaperSerializer(paper).data
+		response = UserShowPaperSerializer(paper).data
 		if is_invited_user(user=user, paper=paper):
 			return Response(
 				data=response,
@@ -150,7 +147,7 @@ class PaperAPI(APIView):
 			return Response(status=471)
 
 	def post(self, request):
-		serializer = PaperCreateSerializer(data=request.data)
+		serializer = PaperCreateSerializer(data=request.data, host=request.user)
 		if serializer.is_valid():
 			paper = serializer.save()
 			return Response(
@@ -296,6 +293,10 @@ class PaperPasswordAPI(APIView):
 
 class QueryIndexAPI(APIView):
 	def get(self, request):
+
+		# if request.user.is_anonymous:
+		# 	return Response(status=401)
+
 		query_type = request.GET.get("type", "all").upper()
 
 		if query_type == "ALL":
@@ -319,25 +320,3 @@ class QueryIndexAPI(APIView):
 				status=status.HTTP_201_CREATED
 				)
 		return Response(data=serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
