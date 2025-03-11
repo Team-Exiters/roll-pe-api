@@ -146,9 +146,9 @@ class ForgotPasswordAPI(APIView):
         if not user_query.exists():
             return Response(msg="회원가입되지 않은 이메일입니다.", status=400)
         
-        provider = user_query.get().provider
+        provider = user_query.values_list('provider',flat=True).first()
         if provider is not None:
-            return Response(msg=f"이미 {provider}로 회원가입된 이메일입니다.", status=400)
+            return Response(msg=f"{provider}로 회원가입된 이메일입니다. {provider}에서 비밀번호 찾기를 진행해주세요.", status=400)
         
         generate_send_email(request, email, path_code="password")
         return Response(msg="비밀번호 변경 이메일이 전송되었습니다.", status=200)
