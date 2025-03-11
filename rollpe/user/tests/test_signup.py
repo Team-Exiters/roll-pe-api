@@ -5,6 +5,7 @@ from django.urls import reverse
 from django.core import mail
 from user.models import User
 import jwt
+import re
 from django.conf import settings
 from django.core.cache import cache
 
@@ -48,9 +49,12 @@ class EmailVerificationTest(APITestCase):
         self.assertEqual(email.to, [self.user_data["email"]])
 
         # 이메일 본문에서 토큰 추출
-        token_start_index = email.body.find("token=") + len("token=")
-        self.token = email.body[token_start_index:].strip()  # 이메일 본문에서 토큰 추출
-        self.assertTrue(self.token, "Token not found in email body")
+        html_content = email.alternatives[0][0]
+        
+        match = re.search(r'token=([\w.-]+)', html_content)
+        token = match.group(1)
+
+        self.assertTrue(token, "Token not found in email body")
 
     def test_verify_email_with_valid_token(self):
         """
@@ -65,8 +69,10 @@ class EmailVerificationTest(APITestCase):
 
         # 이메일 본문에서 토큰 추출
         email = mail.outbox[0]
-        token_start_index = email.body.find("token=") + len("token=")
-        token = email.body[token_start_index:].strip()
+        html_content = email.alternatives[0][0]
+
+        match = re.search(r'token=([\w.-]+)', html_content)
+        token = match.group(1)
 
         # 이메일 인증 요청
         response = self.client.get(f"{self.verify_email_url}?path_code=email&token={token}")
@@ -107,8 +113,11 @@ class EmailVerificationTest(APITestCase):
 
         # 이메일 본문에서 토큰 추출
         email = mail.outbox[0]
-        token_start_index = email.body.find("token=") + len("token=")
-        token = email.body[token_start_index:].strip()
+
+        html_content = email.alternatives[0][0]
+
+        match = re.search(r'token=([\w.-]+)', html_content)
+        token = match.group(1)
 
         # 만료된 토큰 생성 (exp를 과거로 설정)
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
@@ -136,8 +145,11 @@ class EmailVerificationTest(APITestCase):
 
         # 이메일 본문에서 토큰 추출
         email = mail.outbox[0]
-        token_start_index = email.body.find("token=") + len("token=")
-        token = email.body[token_start_index:].strip()
+
+        html_content = email.alternatives[0][0]
+
+        match = re.search(r'token=([\w.-]+)', html_content)
+        token = match.group(1)
 
         # 같은 토큰으로 2번 요청
         self.client.get(f"{self.verify_email_url}?pathCode=email&token={token}") # 성공
