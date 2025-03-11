@@ -76,7 +76,7 @@ def kakao_login(request, code, access):
         client_id = return_env_value("SOCIAL_AUTH_KAKAO_CLIENT_ID")
         
         # call_back_url = f"https://dev.popping.world/api/user/social/login/kakao"
-        call_back_url = f"{settings.BASE_DOMAIN}/oauth/callback/kakao"
+        call_back_url = f"{request.scheme}://{settings.BASE_DOMAIN}/oauth/callback/kakao"
         # call_back_url = f"http://localhost:8000/api/user/social/login/kakao"
 
         get_kakao_token = requests.post(
@@ -122,7 +122,7 @@ def google_login(request, code, access):
         client_id = return_env_value("WEB_GOOGLE_OAUTH_CLIENT_KEY")
 
         # http://localhost:8000/api/user/social-google
-        call_back_url = f"{settings.BASE_DOMAIN}/oauth/callback/google"
+        call_back_url = f"{request.scheme}://{settings.BASE_DOMAIN}/oauth/callback/google"
         # call_back_url = f"http://localhost:8000/api/user/social/login/google"
 
         get_google_token = requests.post(
@@ -218,7 +218,7 @@ class KakaoLoginView(APIView):
     def get(self, request):
         client_id = return_env_value("SOCIAL_AUTH_KAKAO_CLIENT_ID")
         # redirect_uri = "http://localhost:8000/api/user/social/login/kakao"
-        redirect_uri = f"{settings.BASE_DOMAIN}/oauth/callback/kakao"
+        redirect_uri = f"{request.scheme}://{settings.BASE_DOMAIN}/oauth/callback/kakao"
         return redirect(
             f"https://kauth.kakao.com/oauth/authorize?client_id={client_id}&redirect_uri={redirect_uri}&response_type=code"
         )
