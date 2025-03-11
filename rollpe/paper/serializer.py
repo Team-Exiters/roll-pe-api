@@ -9,7 +9,8 @@ class UserShowPaperSerializer(serializers.ModelSerializer):
 	theme = serializers.SerializerMethodField()
 	size = serializers.SerializerMethodField()
 	ratio = serializers.SerializerMethodField()
-	receiver = serializers.SerializerMethodField()
+	receive = serializers.SerializerMethodField()
+	createdAt = serializers.SerializerMethodField()
 
 	class Meta:
 		model = Paper
@@ -18,20 +19,23 @@ class UserShowPaperSerializer(serializers.ModelSerializer):
 			"code",
 			"title",
 			"host",
-			'receiver',
+			'receive',
 			"viewStat",
-			"receivingDate",
-			"receivingStat",
 			"theme",
 			'size',
 			'ratio',
 			'createdAt',
 			]
+
 	def get_host(self, paper):
 		return UserViewSerializer(paper.hostFK).data
 
-	def get_receiver(self, paper):
-		return UserViewSerializer(paper.receiverFK).data
+	def get_receive(self, paper):
+		return {
+			"recevier": UserViewSerializer(paper.receiverFK).data,
+			"receivingDate": paper.receivingDate,
+			"receivingStat": paper.receivingStat,
+			}
 
 	def get_theme(self, paper):
 		return paper.themeFK.name
@@ -41,6 +45,9 @@ class UserShowPaperSerializer(serializers.ModelSerializer):
 
 	def get_ratio(self, paper):
 		return paper.ratioFK.name
+
+	def get_createdAt(self, paper):
+		return paper.createdAt
 
 class PaperCreateSerializer(serializers.ModelSerializer):
 	class Meta:

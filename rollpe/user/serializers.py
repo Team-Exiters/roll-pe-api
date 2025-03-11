@@ -88,6 +88,5 @@ class UserViewSerializer(serializers.ModelSerializer):
             'code',
             'identifyCode',
             'name',
-            'email',
             'provider'
         )
