@@ -53,7 +53,7 @@ class PaperCreateSerializer(serializers.ModelSerializer):
 	class Meta:
 		model = Paper
 		fields = [
-			'receiverFK', 'receiverName',
+			'hostFK', 'receiverFK', 'receiverName',
 			'receiverTel', 'receivingDate', 'receivingStat',
 			'themeFK', 'sizeFK', 'ratioFK',
 			'viewStat', 'title', 'description', 'password',

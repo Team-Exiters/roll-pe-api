@@ -147,7 +147,7 @@ class PaperAPI(APIView):
 			return Response(status=471)
 
 	def post(self, request):
-		serializer = PaperCreateSerializer(data=request.data, host=request.user)
+		serializer = PaperCreateSerializer(data=request.data)
 		if serializer.is_valid():
 			paper = serializer.save()
 			return Response(
