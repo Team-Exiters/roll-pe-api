@@ -85,7 +85,6 @@ class UserViewSerializer(serializers.ModelSerializer):
         model = User
         fields = (
             'id',
-            'code',
             'identifyCode',
             'name',
             'provider'
