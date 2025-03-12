@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from heart.models import Heart
+from heart.serializers import HeartReadSerializer
 from paper.models import Paper, QueryIndexTable
 from user.serializers import UserViewSerializer
 
@@ -11,6 +13,8 @@ class UserShowPaperSerializer(serializers.ModelSerializer):
 	ratio = serializers.SerializerMethodField()
 	receive = serializers.SerializerMethodField()
 	createdAt = serializers.SerializerMethodField()
+	hearts = serializers.SerializerMethodField()
+	invitingUser = serializers.SerializerMethodField()
 
 	class Meta:
 		model = Paper
@@ -24,6 +28,8 @@ class UserShowPaperSerializer(serializers.ModelSerializer):
 			"theme",
 			'size',
 			'ratio',
+			'hearts',
+			'invitingUser',
 			'createdAt',
 			]
 
@@ -32,7 +38,7 @@ class UserShowPaperSerializer(serializers.ModelSerializer):
 
 	def get_receive(self, paper):
 		return {
-			"recevier": UserViewSerializer(paper.receiverFK).data,
+			"receiver": UserViewSerializer(paper.receiverFK).data,
 			"receivingDate": paper.receivingDate,
 			"receivingStat": paper.receivingStat,
 			}
@@ -48,6 +54,25 @@ class UserShowPaperSerializer(serializers.ModelSerializer):
 
 	def get_createdAt(self, paper):
 		return paper.createdAt
+
+	def get_hearts(self, paper):
+
+		hearts = Heart.objects.filter(paperFK=paper)
+		serializer = HeartReadSerializer(hearts, many=True)
+
+		if len(serializer.data) == 0:
+			return {"count": 0}
+
+		return {
+			"count": len(serializer.data),
+			"data": serializer.data
+			}
+
+	def get_invitingUser(self, paper):
+		if not paper.invitingUser:
+			return []
+		return UserViewSerializer(paper.invitingUser.all(), many=True).data
+
 
 class PaperCreateSerializer(serializers.ModelSerializer):
 	class Meta:
