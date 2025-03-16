@@ -198,7 +198,7 @@ EMAIL_HOST_USER = return_env_value('EMAIL_USER')
 EMAIL_HOST_PASSWORD = return_env_value('EMAIL_PASSWORD')
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
-# CSRF_TRUSTED_ORIGINS = ["https://yourdomain.com"]
+CSRF_TRUSTED_ORIGINS = ["https://dev.popping.world"]
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # CORS Config
