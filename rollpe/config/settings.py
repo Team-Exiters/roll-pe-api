@@ -210,3 +210,4 @@ CORS_ALLOWED_ORIGINS = [
 CORS_ALLOW_CREDENTIALS = True
 
 BASE_DOMAIN = 'localhost:3000'
+API_DOMAIN = 'dev.popping.world'
