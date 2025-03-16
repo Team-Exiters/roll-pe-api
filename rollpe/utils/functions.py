@@ -11,6 +11,7 @@ from django.core.mail import EmailMultiAlternatives
 
 from user.models import User
 
+from utils.response import Response
 
 def generate_email_verification_token(email):
     payload = {
@@ -70,10 +71,12 @@ def generate_send_email(request, email, path_code):
                 '<p>아래 링크로 접속해서 비밀번호 변경을 진행해주세요.</p><br>'
                 f'<p><a href="{activation_url}">비밀변호 변경하기</a></p>'
             )
-
-    msg = EmailMultiAlternatives(subject,'', from_email, to)
-    msg.attach_alternative(html_content, "text/html")
-    msg.send()
+    try:
+        msg = EmailMultiAlternatives(subject,'', from_email, to)
+        msg.attach_alternative(html_content, "text/html")
+        msg.send()
+    except Exception as e:
+        return Response(msg=f"이메일 전송 실패 : {e}", status=400)
 
     return
 
