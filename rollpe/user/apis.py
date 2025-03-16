@@ -81,6 +81,31 @@ def signup_api(request):
     else:
         return Response(msg=serializer.errors, status=400)
 
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def drop_user_data(request):
+
+    identify_code = request.data.get("identifyCode")
+    refresh_token = request.data.get("refresh")
+
+    if not identify_code:
+        return Response(msg="식별 코드가 없습니다.", status=400)
+
+    if not refresh_token:
+        return Response(msg="Refresh token이 없습니다.", status=403)
+    
+    if request.user.identifyCode != identify_code:
+        return Response(msg="잘못된 접근입니다.", status=400)
+
+    try:
+        token = RefreshToken(refresh_token)
+        token.blacklist()  
+    except TokenError as e:
+        return Response(msg="유효한 Refresh Token이 아닙니다. ", status=403)
+
+    User.objects.filter(pk=request.user.id).delete()
+
+    return Response(msg="회원 탈퇴 되었습니다.", status=200)
 
 ### 예정 : 추후 이메일 인증 완료 페이지 redirect ###
 # 회원가입 이메일 인증시 
