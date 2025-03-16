@@ -194,11 +194,13 @@ EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = return_env_value('EMAIL_USER')
-EMAIL_HOST_PASSWORD = return_env_value('EMAIL_PASSWORD')
+EMAIL_HOST_USER = 'team.exiters@gmail.com'
+EMAIL_HOST_PASSWORD = 'sxdwbfnuezydmpcm'
+# EMAIL_HOST_USER = return_env_value('EMAIL_USER')
+# EMAIL_HOST_PASSWORD = return_env_value('EMAIL_PASSWORD')
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
-CSRF_TRUSTED_ORIGINS = ["https://dev.popping.world"]
+CSRF_TRUSTED_ORIGINS = ['https://dev.popping.world', 'http://localhost:8000', 'http://localhost:3000', 'http://0.0.0.0:8000', 'http://0.0.0.0:3000']
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # CORS Config
