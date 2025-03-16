@@ -43,42 +43,41 @@ def verify_email_token(token):
         raise ValueError("유효하지 않은 링크입니다. 재전송 버튼을 눌러주세요.") 
 
 def generate_send_email(request, email, path_code):
-
-    from_email = settings.EMAIL_HOST_USER
-    to = [email]
-
-    match path_code:
-        case "email":
-            subject="롤페 이메일 인증"
-
-            token = generate_email_verification_token(email)
-            activation_url = f"{request.scheme}://{request.get_host()}/api/user/verify-email?path_code={path_code}&token={token}"
-
-            html_content = (
-                '<p>이메일 인증</p><br>'
-                '<p>아래 링크를 클릭하여 이메일 인증을 완료해주세요.</p><br>'
-                f'<p><a href="{activation_url}">이메일 인증하기</a></p>'
-            )
-
-        case "password":
-            subject="롤페 비밀번호 찾기"
-
-            identify_code = User.objects.filter(email=email).values_list('identifyCode', flat=True).first()
-            activation_url = f"{request.scheme}://{settings.BASE_DOMAIN}/forgot-password?identifyCode={identify_code}"
-
-            html_content = (
-                '<p>비밀번호 찾기</p><br>'
-                '<p>아래 링크로 접속해서 비밀번호 변경을 진행해주세요.</p><br>'
-                f'<p><a href="{activation_url}">비밀변호 변경하기</a></p>'
-            )
     try:
-        msg = EmailMultiAlternatives(subject,'', from_email, to)
+        from_email = settings.EMAIL_HOST_USER
+        to = [email]
+
+        match path_code:
+            case "email":
+                subject = "롤페 이메일 인증"
+                token = generate_email_verification_token(email)
+                activation_url = f"{request.scheme}://{request.get_host()}/api/user/verify-email?path_code={path_code}&token={token}"
+                html_content = (
+                    '<p>이메일 인증</p><br>'
+                    '<p>아래 링크를 클릭하여 이메일 인증을 완료해주세요.</p><br>'
+                    f'<p><a href="{activation_url}">이메일 인증하기</a></p>'
+                )
+            case "password":
+                subject="롤페 비밀번호 찾기"
+
+                identify_code = User.objects.filter(email=email).values_list('identifyCode', flat=True).first()
+                activation_url = f"http://{settings.BASE_DOMAIN}/forgot-password?identifyCode={identify_code}"
+                # activation_url = f"{request.scheme}://{settings.BASE_DOMAIN}/forgot-password?identifyCode={identify_code}"
+
+                html_content = (
+                    '<p>비밀번호 찾기</p><br>'
+                    '<p>아래 링크로 접속해서 비밀번호 변경을 진행해주세요.</p><br>'
+                    f'<p><a href="{activation_url}">비밀변호 변경하기</a></p>'
+                )
+
+        msg = EmailMultiAlternatives(subject, '', from_email, to)
         msg.attach_alternative(html_content, "text/html")
         msg.send()
+        
+        return Response(msg="이메일 전송 성공", status=200)
+        
     except Exception as e:
-        return Response(msg=f"이메일 전송 실패 : {e}", status=400)
-
-    return
+        return Response(msg=f"이메일 전송 실패: {str(e)}", status=400)
 
 def create_idenfy_number(request):
 

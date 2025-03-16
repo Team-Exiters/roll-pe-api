@@ -58,7 +58,6 @@ def logout_api(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def signup_api(request):
-    # 회원가입 데이터 처리
     email = request.data.get("email")
 
     if User.objects.filter(email=email).exists():
@@ -68,16 +67,18 @@ def signup_api(request):
     if serializer.is_valid():
         try:
             user = serializer.create(serializer.validated_data)
-            # serializer = UserSerializer(user)
-
-            generate_send_email(request, user.email, path_code="email")
+            
+            # 이메일 전송 시도 및 결과 확인
+            email_response = generate_send_email(request, user.email, path_code="email")
+            if isinstance(email_response, Response) and email_response.status_code != 200:
+                # 이메일 전송 실패 시 생성된 사용자 삭제
+                user.delete()
+                return email_response
 
             return Response(msg="회원가입이 완료되었습니다. 이메일을 확인해주세요.", status=201)
         
         except Exception as e:
-            
-            return Response(msg=serializer.errors, status=400)
-
+            return Response(msg=f"회원가입 처리 중 오류가 발생했습니다: {str(e)}", status=400)
     else:
         return Response(msg=serializer.errors, status=400)
 
