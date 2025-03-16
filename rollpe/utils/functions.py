@@ -51,7 +51,7 @@ def generate_send_email(request, email, path_code):
             case "email":
                 subject = "롤페 이메일 인증"
                 token = generate_email_verification_token(email)
-                activation_url = f"{request.scheme}://{request.get_host()}/api/user/verify-email?path_code={path_code}&token={token}"
+                activation_url = f"https://{settings.API_DOMAIN}/api/user/verify-email?path_code={path_code}&token={token}"
                 html_content = (
                     '<p>이메일 인증</p><br>'
                     '<p>아래 링크를 클릭하여 이메일 인증을 완료해주세요.</p><br>'
