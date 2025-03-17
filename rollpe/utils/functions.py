@@ -61,7 +61,7 @@ def generate_send_email(request, email, path_code):
                 subject="롤페 비밀번호 찾기"
 
                 identify_code = User.objects.filter(email=email).values_list('identifyCode', flat=True).first()
-                activation_url = f"http://{settings.BASE_DOMAIN}/forgot-password?identifyCode={identify_code}"
+                activation_url = f"http://{settings.BASE_DOMAIN}/forgot-password/{identify_code}"
                 # activation_url = f"{request.scheme}://{settings.BASE_DOMAIN}/forgot-password?identifyCode={identify_code}"
 
                 html_content = (
