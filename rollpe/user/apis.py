@@ -256,22 +256,18 @@ def search_user_name(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
 def user_password_check(request):
     password = request.data.get("password", None)
     user = request.user
-
+ 
     if user.is_anonymous:
         return Response(status=401)
-
+    
     if password is None:
         return Response(status=400, msg="패스워드가 없습니다.")
-
-    if user.check_password(password):
-
-        return Response(status=200)
-    else:
-        return Response(status=400, msg="비밀번호가 일치하지 않습니다.")
+ 
+ 
+    return Response(status=200, data={"status": user.check_password(password)})
 
 @api_view(['PATCH'])
 def change_user_password(request):
