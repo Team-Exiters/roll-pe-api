@@ -18,7 +18,7 @@ class QueryIndexTable(models.Model):
 		)
 	type = models.CharField(
 		choices=PAPER_QUERY_TYPE,
-		max_length=6,
+		max_length=10,
 		)
 	is_vip = models.BooleanField(default=False)
 
