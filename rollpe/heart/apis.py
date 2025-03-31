@@ -101,6 +101,10 @@ class HeartAPI(APIView):
         if Heart.objects.filter(userFK=request.user.id, paperFK=paper_instance.id).exists():
             return Response(status=482)
         
+        # 중복 index 검증
+        if Heart.objects.filter(location=validated_data['location'], paperFK=paper_instance.id).exists():
+            return Response(status=485)
+        
         # 비공개 롤링페이퍼일 경우만 검증
         if not paper_instance.viewStat and not is_only_invited_user(request.user, paper_instance):
             return Response(status=471)
