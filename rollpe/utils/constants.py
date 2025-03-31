@@ -83,6 +83,11 @@ class SystemCodeManager:
 			"link": None,
 			"message": "해당 요청은 관리자 권한으로만 수행할 수 있습니다."
 			},
+  		485: {
+			"code": "DUPLICATE_INDEX",
+			"link": None,
+			"message": "다른 사용자가 이미 작성한 마음입니다."
+			},
 		}
 
 	@classmethod

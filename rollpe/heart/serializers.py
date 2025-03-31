@@ -48,13 +48,14 @@ class HeartReadSerializer(serializers.ModelSerializer):
     author = UserViewSerializer(source='userFK')
     content = serializers.CharField(source='context')
     createdAt = serializers.SerializerMethodField()
-    color=serializers.CharField(source='colorFK.name')
+    color = serializers.CharField(source='colorFK.name')
     version = serializers.SerializerMethodField()
+    code = serializers.CharField(source='code')
     
 
     class Meta:
         model = Heart
-        fields = ('id', 'index', 'author', 'content', 'createdAt', 'color', 'version')
+        fields = ('id', 'index', 'author', 'content', 'createdAt', 'color', 'version', 'code')
         depth = 1
        
     def get_createdAt(self, obj):
