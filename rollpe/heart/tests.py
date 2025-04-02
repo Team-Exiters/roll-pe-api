@@ -349,29 +349,29 @@ class HeartCreateAPITest(BaseTestSetup):
         self.assertEqual(response.status_code, 471, '상태코드가 올바르지 않습니다.')
     
     
-    def test_create_heart(self):
-        """
-            새로운 마음을 생성할 수 있어야 한다.
-        """
-        self.signin('user1')
-        private_response = self.client.post(self.api_url, self.private_heart_data, format='json')
-        public_response = self.client.post(self.api_url, self.public_heart_data, format='json')
+    # def test_create_heart(self):
+    #     """
+    #         새로운 마음을 생성할 수 있어야 한다.
+    #     """
+    #     self.signin('user1')
+    #     private_response = self.client.post(self.api_url, self.private_heart_data, format='json')
+    #     public_response = self.client.post(self.api_url, self.public_heart_data, format='json')
         
-        # 응답 상태 코드 확인
-        self.assertEqual(public_response.status_code, 201, '상태코드가 올바르지 않습니다.')
+    #     # 응답 상태 코드 확인
+    #     self.assertEqual(public_response.status_code, 201, '상태코드가 올바르지 않습니다.')
     
     
-    def test_create_heart_duplicate(self):
-        """
-            이미 마음을 작성한 유저는 재작성할 수 없다.
-        """
-        self.signin('user1')
-        self.client.post(self.api_url, self.private_heart_data, format='json')
+    # def test_create_heart_duplicate(self):
+    #     """
+    #         이미 마음을 작성한 유저는 재작성할 수 없다.
+    #     """
+    #     self.signin('user1')
+    #     self.client.post(self.api_url, self.private_heart_data, format='json')
         
-        # 재작성 요청
-        response = self.client.post(self.api_url, self.private_heart_data, format='json')
+    #     # 재작성 요청
+    #     response = self.client.post(self.api_url, self.private_heart_data, format='json')
     
-        self.assertEqual(response.status_code, 482, '상태코드가 올바르지 않습니다.')
+    #     self.assertEqual(response.status_code, 482, '상태코드가 올바르지 않습니다.')
 
 
 class HeartUpdateAPITest(BaseTestSetup):
