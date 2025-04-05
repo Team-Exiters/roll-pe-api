@@ -50,7 +50,7 @@ class HeartReadSerializer(serializers.ModelSerializer):
     createdAt = serializers.SerializerMethodField()
     color = serializers.CharField(source='colorFK.name')
     version = serializers.SerializerMethodField()
-    code = serializers.CharField(source='code')
+    code = serializers.CharField()
     
 
     class Meta:
