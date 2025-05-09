@@ -15,6 +15,7 @@ class UserShowPaperSerializer(serializers.ModelSerializer):
 	createdAt = serializers.SerializerMethodField()
 	hearts = serializers.SerializerMethodField()
 	invitingUser = serializers.SerializerMethodField()
+	maxHeartLength = serializers.SerializerMethodField()
 
 	class Meta:
 		model = Paper
@@ -28,6 +29,7 @@ class UserShowPaperSerializer(serializers.ModelSerializer):
 			"theme",
 			'size',
 			'ratio',
+			'maxHeartLength',
 			'hearts',
 			'invitingUser',
 			'createdAt',
@@ -54,6 +56,9 @@ class UserShowPaperSerializer(serializers.ModelSerializer):
 
 	def get_createdAt(self, paper):
 		return paper.createdAt
+
+	def get_maxHeartLength(self, paper):
+		return paper.sizeFK.query.get('max')
 
 	def get_hearts(self, paper):
 
