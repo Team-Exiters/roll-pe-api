@@ -1,5 +1,6 @@
 from django.contrib.auth.hashers import check_password, make_password
 from rest_framework import status
+from rest_framework.decorators import api_view
 from rest_framework.pagination import PageNumberPagination
 
 from heart.models import Heart
@@ -115,6 +116,12 @@ class MyPagePaperAPI(APIView):
 
 
 class PaperAPI(APIView):
+	# TODO 1. [x] Rollpe response에 invitedUser 누락 추가 요청드립니다.
+	# TODO 2. [x] 롤페 생성 API에 유저 추가 위해 Request Body에 invitedUser 추가 부탁드립니다.
+	# 2025.03.27 정승민
+
+
+
 	def get(self, request):
 		"""
 		Paper Detail Info
@@ -205,7 +212,6 @@ class PaperEnterManageAPI(APIView):
 				return Response(status=472)
 
 
-
 class PaperPasswordAPI(APIView):
 	def post(self, request):
 		"""
@@ -290,7 +296,6 @@ class PaperPasswordAPI(APIView):
 			)
 
 
-
 class QueryIndexAPI(APIView):
 	def get(self, request):
 
@@ -320,3 +325,19 @@ class QueryIndexAPI(APIView):
 				status=status.HTTP_201_CREATED
 				)
 		return Response(data=serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+
+
+
+
+# TODO 1. [] 롤페 나가기
+@api_view(['DELETE', 'POST'])
+def quit_paper(request):
+	pass
+
+# TODO 2. [] 롤페 전달하기 (reciver에게 전송)
+# TODO 3. [] 참여자(초대된 유저) 강퇴
+# TODO 4. [] 롤페 종료 (삭제)
+# 2025.04.11 김태은
