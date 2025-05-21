@@ -15,7 +15,7 @@ from django.conf import settings
 from django.contrib.auth.hashers import check_password
 
 from utils.response import Response
-from utils.functions import verify_email_token, generate_send_email, create_idenfy_number
+from utils.functions import verify_email_token, generate_send_email, create_idenfy_number, PRIVACY, TERMS
 
 from user.serializers import UserSerializer, CustomTokenObtainPairSerializer, UserViewSerializer
 from user.models import User
@@ -302,3 +302,19 @@ def change_user_password(request):
 
 # rollpe2025!
 # testpassword!
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def get_docs_api(request):
+    query_string = request.GET.get("docs")
+    try:
+        match query_string:
+            case "privacy":
+                data = PRIVACY.replace("\n", "")
+            case "terms":
+                data = TERMS.replace("\n", "")
+    except:
+        return Response(msg="잘못된 입력값입니다.", status=400)    
+        
+    
+    return Response(data=data, status=200)
