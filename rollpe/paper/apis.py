@@ -101,6 +101,11 @@ class MyPagePaperAPI(APIView):
 			data = UserShowPaperSerializer(receiving_paper, many=True).data
 			return Response(data=data, status=status.HTTP_200_OK)
 
+		elif request.GET.get("type") == 'host':
+			receiving_paper = Paper.objects.filter(hostFK=user)
+			data = UserShowPaperSerializer(receiving_paper, many=True).data
+			return Response(data=data, status=status.HTTP_200_OK)
+
 		elif request.GET.get("type") == 'inviting':
 			my_paper = Paper.objects.filter(invitingUser=user)
 			data = UserShowPaperSerializer(my_paper, many=True).data
@@ -108,7 +113,7 @@ class MyPagePaperAPI(APIView):
 
 		else:
 			return Response(
-				msg="Query Param type은 main, my, inviting이 존재합니다.",
+				msg="Query Param type은 main, my, host, inviting이 존재합니다.",
 				status=status.HTTP_400_BAD_REQUEST
 				)
 
