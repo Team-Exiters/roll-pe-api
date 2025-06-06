@@ -310,9 +310,9 @@ def get_docs_api(request):
     try:
         match query_string:
             case "privacy":
-                data = PRIVACY.replace("\n", "")
+                data = PRIVACY
             case "terms":
-                data = TERMS.replace("\n", "")
+                data = TERMS
     except:
         return Response(msg="잘못된 입력값입니다.", status=400)    
         
