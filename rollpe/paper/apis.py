@@ -97,17 +97,17 @@ class MyPagePaperAPI(APIView):
 			return Response(data=data, status=status.HTTP_200_OK)
 
 		elif request.GET.get("type") == 'my':
-			receiving_paper = Paper.objects.filter(receiverFK=user, receivingStat=1)
+			receiving_paper = Paper.objects.filter(receiverFK=user, receivingStat=1).order_by('-createdAt')
 			data = UserShowPaperSerializer(receiving_paper, many=True).data
 			return Response(data=data, status=status.HTTP_200_OK)
 
 		elif request.GET.get("type") == 'host':
-			receiving_paper = Paper.objects.filter(hostFK=user)
+			receiving_paper = Paper.objects.filter(hostFK=user).order_by('-createdAt')
 			data = UserShowPaperSerializer(receiving_paper, many=True).data
 			return Response(data=data, status=status.HTTP_200_OK)
 
 		elif request.GET.get("type") == 'inviting':
-			my_paper = Paper.objects.filter(invitingUser=user)
+			my_paper = Paper.objects.filter(invitingUser=user).order_by('-createdAt')
 			data = UserShowPaperSerializer(my_paper, many=True).data
 			return Response(data=data, status=status.HTTP_200_OK)
 
