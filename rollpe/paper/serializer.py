@@ -90,6 +90,10 @@ class PaperCreateSerializer(serializers.ModelSerializer):
 			]
 		read_only_fields = ("id", "createdAt", "updatedAt", "code")
 
+		extra_kwargs = {
+      'password': {'required': False, 'allow_null': True, 'write_only': True}
+    }
+
 	def validate_receiverTel(self, receiverTel):
 		if not receiverTel.isdigit():
 			raise serializers.ValidationError("receiverTel 영역의 값은 int로 이루어져야 합니다.")
