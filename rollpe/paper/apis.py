@@ -99,17 +99,14 @@ class MyPagePaperAPI(APIView):
 		elif request.GET.get("type") == 'my':
 			receiving_paper = Paper.objects.filter(receiverFK=user, receivingStat=1)
 			data = UserShowPaperSerializer(receiving_paper, many=True).data
-			return Response(data=data, status=status.HTTP_200_OK)
 
 		elif request.GET.get("type") == 'host':
 			receiving_paper = Paper.objects.filter(hostFK=user)
 			data = UserShowPaperSerializer(receiving_paper, many=True).data
-			return Response(data=data, status=status.HTTP_200_OK)
 
 		elif request.GET.get("type") == 'inviting':
 			my_paper = Paper.objects.filter(invitingUser=user)
 			data = UserShowPaperSerializer(my_paper, many=True).data
-			return Response(data=data, status=status.HTTP_200_OK)
 
 		else:
 			return Response(
@@ -117,7 +114,16 @@ class MyPagePaperAPI(APIView):
 				status=status.HTTP_400_BAD_REQUEST
 				)
 
-		return Response(status=200)
+
+		paginator = self.pagination_class()
+		page = paginator.paginate_queryset(data, request)  # <- 페이지 분할
+		serializer = UserShowPaperSerializer(page, many=True)
+
+
+		return Response(
+			data=paginator.get_paginated_response(serializer.data).data,
+            status=status.HTTP_200_OK
+			)
 
 
 class PaperAPI(APIView):
