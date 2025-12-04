@@ -97,15 +97,15 @@ class MyPagePaperAPI(APIView):
 			return Response(data=data, status=status.HTTP_200_OK)
 
 		elif request.GET.get("type") == 'my':
-			receiving_paper = Paper.objects.filter(receiverFK=user, receivingStat=1)
+			receiving_paper = Paper.objects.filter(receiverFK=user, receivingStat=1).order_by('-createdAt')
 			data = UserShowPaperSerializer(receiving_paper, many=True).data
 
 		elif request.GET.get("type") == 'host':
-			receiving_paper = Paper.objects.filter(hostFK=user)
+			receiving_paper = Paper.objects.filter(hostFK=user).order_by('-createdAt')
 			data = UserShowPaperSerializer(receiving_paper, many=True).data
 
 		elif request.GET.get("type") == 'inviting':
-			my_paper = Paper.objects.filter(invitingUser=user)
+			my_paper = Paper.objects.filter(invitingUser=user).order_by('-createdAt')
 			data = UserShowPaperSerializer(my_paper, many=True).data
 
 		else:
@@ -168,6 +168,8 @@ class PaperAPI(APIView):
 		serializer = PaperCreateSerializer(data=request.data)
 		if serializer.is_valid():
 			paper = serializer.save()
+			# paper만든 순간 본인도 paper_invite_user에 insert
+			paper.invitingUser.add(request.user)
 			return Response(
 				data=PaperCreateSerializer(paper).data,
 				status=status.HTTP_201_CREATED
