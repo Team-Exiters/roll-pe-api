@@ -77,5 +77,10 @@ class Paper(BaseTimeModel):
 	invitingUser = models.ManyToManyField('user.User', related_name='inviting_user', blank=True)
 
 	def save(self, *args, **kwargs):
-		self.password = make_password(self.password)
+		if not self.password:
+				self.viewStat = True
+		else:
+				# password가 있을 경우 해시 처리
+				self.password = make_password(self.password)
+				
 		super().save(*args, **kwargs)

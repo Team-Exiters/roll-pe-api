@@ -172,6 +172,8 @@ class PaperAPI(APIView):
 		serializer = PaperCreateSerializer(data=request.data)
 		if serializer.is_valid():
 			paper = serializer.save()
+			# paper만든 순간 본인도 paper_invite_user에 insert
+			paper.invitingUser.add(request.user)
 			return Response(
 				data=PaperCreateSerializer(paper).data,
 				status=status.HTTP_201_CREATED
