@@ -79,6 +79,7 @@ class MyPagePaperAPI(APIView):
 	1. 내 롤페(내가 작성한(호스트)한 + 받은 롤페)
 	2. 내가 참여한 롤페
 	"""
+	pagination_class = PageNumberPagination
 
 	def get(self, request):
 		user = request.user
@@ -97,16 +98,13 @@ class MyPagePaperAPI(APIView):
 			return Response(data=data, status=status.HTTP_200_OK)
 
 		elif request.GET.get("type") == 'my':
-			receiving_paper = Paper.objects.filter(receiverFK=user, receivingStat=1)
-			data = UserShowPaperSerializer(receiving_paper, many=True).data
+			query = Paper.objects.filter(receiverFK=user, receivingStat=1)
 
 		elif request.GET.get("type") == 'host':
-			receiving_paper = Paper.objects.filter(hostFK=user)
-			data = UserShowPaperSerializer(receiving_paper, many=True).data
+			query = Paper.objects.filter(hostFK=user)
 
 		elif request.GET.get("type") == 'inviting':
-			my_paper = Paper.objects.filter(invitingUser=user)
-			data = UserShowPaperSerializer(my_paper, many=True).data
+			query = Paper.objects.filter(invitingUser=user)
 
 		else:
 			return Response(
@@ -114,9 +112,15 @@ class MyPagePaperAPI(APIView):
 				status=status.HTTP_400_BAD_REQUEST
 				)
 
+		if len(query) == 0 :
+			return Response(
+				data=[],
+				status=status.HTTP_200_OK
+				)
+
 
 		paginator = self.pagination_class()
-		page = paginator.paginate_queryset(data, request)  # <- 페이지 분할
+		page = paginator.paginate_queryset(query, request)  # <- 페이지 분할
 		serializer = UserShowPaperSerializer(page, many=True)
 
 
@@ -350,5 +354,17 @@ def quit_paper(request):
 
 # TODO 2. [] 롤페 전달하기 (reciver에게 전송)
 # TODO 3. [] 참여자(초대된 유저) 강퇴
+@api_view(['POST'])
+def kick_user(request):
+	user = request.user
+	if user.is_anonymous:
+		return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+
+
 # TODO 4. [] 롤페 종료 (삭제)
+@api_view(['DELETE', 'POST'])
+def delete_paper(request):
+	pass
+
 # 2025.04.11 김태은
