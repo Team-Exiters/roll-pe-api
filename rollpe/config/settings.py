@@ -11,6 +11,8 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
 from pathlib import Path
+import os
+from urllib.parse import urlsplit
 import uuid
 from utils.env import return_env_value
 from datetime import timedelta
@@ -153,7 +155,7 @@ APPEND_SLASH = False
 # settings.py
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'user.authentication.RollpeJWTAuthentication',
     ],
     'DEFAULT_RESPONSE_CLASS': 'utils.response.CustomResponse',
     'DEFAULT_RENDERER_CLASSES': [
@@ -211,3 +213,24 @@ CORS_ALLOW_CREDENTIALS = True
 
 BASE_DOMAIN = 'localhost:3000'
 API_DOMAIN = 'dev.popping.world'
+
+# Apple browser authentication. Keep the private key only on the API server.
+# return_env_value above loads rollpe/.env before these values are read.
+APPLE_AUTH_CLIENT_ID = os.environ.get('APPLE_AUTH_CLIENT_ID', '')
+APPLE_AUTH_NATIVE_CLIENT_ID = os.environ.get('APP_APPLE_BUNDEL_ID', '')
+APPLE_AUTH_TEAM_ID = os.environ.get('APPLE_AUTH_TEAM_ID', '')
+APPLE_AUTH_KEY_ID = os.environ.get('APPLE_AUTH_KEY_ID', '')
+APPLE_AUTH_PRIVATE_KEY_FILE = os.environ.get('APPLE_AUTH_PRIVATE_KEY_FILE', '')
+APPLE_AUTH_REDIRECT_URI = os.environ.get('APPLE_AUTH_REDIRECT_URI', '')
+APPLE_AUTH_TOKEN_ENCRYPTION_KEYS = [
+    value.strip() for value in os.environ.get('APPLE_AUTH_TOKEN_ENCRYPTION_KEYS', '').split(',') if value.strip()
+]
+APPLE_AUTH_RETURN_URLS = [
+    value.strip() for value in os.environ.get('APPLE_AUTH_RETURN_URLS', '').split(',') if value.strip()
+]
+for return_url in APPLE_AUTH_RETURN_URLS:
+    parts = urlsplit(return_url)
+    if parts.scheme in ('http', 'https') and parts.netloc:
+        origin = f'{parts.scheme}://{parts.netloc}'
+        if origin not in CORS_ALLOWED_ORIGINS:
+            CORS_ALLOWED_ORIGINS.append(origin)

@@ -9,13 +9,16 @@ from utils.env import return_env_value
 from utils.response import Response
 from utils.functions import create_idenfy_number
 from .models import User
+from django.db import transaction
+from .apple_sessions import (
+    AppleAuthenticationError, AppleUnavailable, apple_user, exchange_apple_code,
+    save_credential, verify_identity_token,
+)
 
 
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 
-import jwt
-from jwt import PyJWKClient
 import requests
 
 # @api_view(['GET'])
@@ -24,6 +27,7 @@ def social_login(request, provider):
 
     code = request.data.get('code')
     access = request.data.get('accessToken')
+    apple_credential = None
     # code = request.GET.get('code')
     
     match provider:
@@ -38,9 +42,14 @@ def social_login(request, provider):
 
         case "apple":
 
-            user_instance, created = apple_login(request, code, access)
+            try:
+                user_instance, created, apple_credential = apple_login(request, code, access)
+            except AppleAuthenticationError as error:
+                return Response(msg=str(error), status=400)
+            except AppleUnavailable:
+                return Response(msg='애플 인증 설정이나 서버 연결을 확인해주세요.', status=503)
 
-    if created:
+    if created and provider != 'apple':
         user_instance.set_unusable_password()  # 비밀번호 없이 로그인 불가하도록 설정
         identify_token = create_idenfy_number(request)
         user_instance.identifyCode = identify_token
@@ -51,7 +60,7 @@ def social_login(request, provider):
             return Response(msg="이미 다른 SNS로 가입된 이메일입니다.", status=400)
 
     # user_instance로 토큰 발급
-    tokens = get_tokens_for_user(user_instance)
+    tokens = get_tokens_for_user(user_instance, apple_credential=apple_credential)
 
     tokens["user"] = {
         "id": user_instance.id,
@@ -63,8 +72,10 @@ def social_login(request, provider):
 
     return Response(data=tokens, status=200)
 
-def get_tokens_for_user(user):
+def get_tokens_for_user(user, apple_credential=None):
     refresh = RefreshToken.for_user(user)
+    if apple_credential is not None:
+        refresh['apple_session'] = str(apple_credential.session_id)
     return {
         'refresh': str(refresh),
         'access': str(refresh.access_token),
@@ -160,58 +171,29 @@ def google_login(request, code, access):
     return user, created
 
 def apple_login(request, code, access):
-
-    # web에서 넘어오는 인가코드 (web에서 ios로그인 구현시 추가 구현 필요)
-    if code: 
-        identity_token = code
-
-    # app에서 넘어오는 identity_token
+    client_id = settings.APPLE_AUTH_NATIVE_CLIENT_ID
+    if not client_id:
+        raise AppleUnavailable('애플 앱 ID 설정을 확인해주세요.')
+    nonce = request.data.get('nonce')
+    if nonce is not None and not isinstance(nonce, str):
+        raise AppleAuthenticationError('올바르지 않은 애플 로그인 요청입니다.')
+    if code:
+        claims, tokens = exchange_apple_code(code, nonce, client_id=client_id)
+        if access:
+            identity = verify_identity_token(access, client_id, nonce)
+            if identity['sub'] != claims['sub']:
+                raise AppleAuthenticationError('애플 사용자 식별자가 일치하지 않습니다.')
+    elif access:
+        claims = verify_identity_token(access, client_id, nonce)
+        # Older iOS clients send only identityToken. They reauthenticate after 24 hours
+        # and use Apple's documented manual unlink fallback on account deletion.
+        tokens = {'id_token': access}
     else:
-        identity_token = access
-
-    # JWT 검증
-    decoded_token = decode_apple_identity_token(identity_token)
-    if not decoded_token:
-        return Response(msg="유효하지 않는 Apple 토큰입니다.", status=400)
-    
-    user_email = decoded_token.get("email")  # 애플이 제공한 이메일
-    # apple_id = decoded_token.get("sub")  # 애플 유저 고유 ID
-    apple_name = request.data.get('name')  # 애플 유저 고유 ID
-
-    user, created = User.objects.get_or_create(
-        email=user_email,
-        defaults={'name': apple_name,'email':user_email}
-    )
-
-    return user, created
-
-def decode_apple_identity_token(identity_token):
-    """애플 JWT(identityToken) 검증"""
-    try:
-        # JWT Header에서 'kid' 가져오기
-        headers = jwt.get_unverified_header(identity_token)
-        kid = headers.get("kid")
-
-        # 애플의 공개 키 가져오기
-        apple_keys_url = "https://appleid.apple.com/auth/keys"  # 애플 공개 키 URL
-        jwks_client = PyJWKClient(apple_keys_url)
-
-        # 'kid'와 일치하는 공개 키 찾기
-        signing_key = jwks_client.get_signing_key(kid).key  # 공개 키 가져오기
-
-        # JWT 검증 및 디코딩
-        decoded_token = jwt.decode(identity_token, signing_key, algorithms=["RS256"], audience=return_env_value("APP_APPLE_BUNDEL_ID"))
-
-        # 'aud' 값 검증 (내 서비스의 client_id와 일치하는지 확인)
-        valid_client_ids = [return_env_value("APP_APPLE_BUNDEL_ID")]  # 여기에 애플 로그인에서 받은 클라이언트 ID를 설정
-        if decoded_token.get("aud") not in valid_client_ids:
-            print(f"Invalid audience: {decoded_token.get('aud')}")
-            return None  # 보안 문제! 인증 거부
-
-        return decoded_token  # 검증 성공 시 사용자 정보 반환
-    except Exception as e:
-        print(f"JWT 검증 실패: {e}")
-        return Response(status=400)
+        raise AppleAuthenticationError('애플 인증 정보가 없습니다.')
+    with transaction.atomic():
+        user, created = apple_user(request, claims, request.data.get('name'))
+        credential = save_credential(user, tokens, client_id)
+    return user, created, credential
 
 
 class KakaoLoginView(APIView):

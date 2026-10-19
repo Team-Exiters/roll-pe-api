@@ -1,6 +1,8 @@
 from django.core.handlers.asgi import ASGIRequest
-from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
+from rest_framework_simplejwt.settings import api_settings
+from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.decorators import api_view, permission_classes
@@ -10,6 +12,8 @@ from rest_framework.views import APIView
 from rest_framework import permissions
 
 from django.db.models import Q
+from django.db import transaction
+from django.utils import timezone
 from django.shortcuts import redirect, get_object_or_404
 from django.conf import settings
 from django.contrib.auth.hashers import check_password
@@ -19,8 +23,14 @@ from utils.functions import verify_email_token, generate_send_email, create_iden
 
 from user.serializers import UserSerializer, CustomTokenObtainPairSerializer, UserViewSerializer
 from user.models import User
+from user.apple_sessions import credential_for_token, revoke_apple_credentials
+from user.authentication import RollpeTokenRefreshSerializer
 
 from paper.models import Paper
+
+class RollpeTokenRefreshView(TokenRefreshView):
+    serializer_class = RollpeTokenRefreshSerializer
+
 
 class CustomTokenObtainPairAPI(TokenObtainPairView):
     permission_classes = [permissions.AllowAny]
@@ -48,7 +58,17 @@ def logout_api(request):
 
     try:
         token = RefreshToken(refresh_token)
-        token.blacklist()  
+        if str(token.get(api_settings.USER_ID_CLAIM)) != str(request.user.pk):
+            return Response(msg='다른 사용자의 Refresh Token입니다.', status=403)
+        with transaction.atomic():
+            user = User.objects.select_for_update().filter(pk=request.user.pk).first()
+            if user is None:
+                return Response(msg='종료된 로그인 세션입니다.', status=401)
+            credential = credential_for_token(user, token)
+            if credential:
+                credential.invalidated_at = timezone.now()
+                credential.save(update_fields=['invalidated_at'])
+            token.blacklist()
     except TokenError as e:
         return Response(msg="유효한 Refresh Token이 아닙니다. ", status=403)
 
@@ -99,12 +119,25 @@ def drop_user_data(request):
 
     try:
         token = RefreshToken(refresh_token)
-        token.blacklist()  
+        if str(token.get(api_settings.USER_ID_CLAIM)) != str(request.user.pk):
+            return Response(msg='다른 사용자의 Refresh Token입니다.', status=403)
     except TokenError as e:
         return Response(msg="유효한 Refresh Token이 아닙니다. ", status=403)
 
-    User.objects.filter(pk=request.user.id).delete()
+    with transaction.atomic():
+        user = User.objects.select_for_update().filter(pk=request.user.pk).first()
+        if user is None:
+            return Response(msg='이미 탈퇴한 계정입니다.', status=401)
+        manual_unlink = revoke_apple_credentials(user) if user.provider == 'apple' else False
+        for outstanding in OutstandingToken.objects.filter(user=user):
+            BlacklistedToken.objects.get_or_create(token=outstanding)
+        user.delete()
 
+    if manual_unlink:
+        return Response(
+            msg='회원 탈퇴 되었습니다. Apple 계정 설정에서 Roll-pe 연결도 해제해주세요.',
+            data={'appleRevocationRequired': True}, status=200,
+        )
     return Response(msg="회원 탈퇴 되었습니다.", status=200)
 
 ### 예정 : 추후 이메일 인증 완료 페이지 redirect ###
