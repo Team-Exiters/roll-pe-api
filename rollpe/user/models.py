@@ -37,7 +37,11 @@ class User(AbstractBaseUser, PermissionsMixin, BaseTimeModel):
     
     email = models.EmailField(
         unique=True,
+        null=True,
+        blank=True,
     )
+
+    apple_subject = models.CharField(max_length=255, unique=True, null=True, editable=False)
     
     birth = models.CharField(
         max_length=6,
@@ -85,3 +89,31 @@ class User(AbstractBaseUser, PermissionsMixin, BaseTimeModel):
     objects = UserManager()
     USERNAME_FIELD = 'email'
     # REQUIRED_FIELDS = ['name','email']
+
+
+class AppleAuthFlow(models.Model):
+    """Shared, single-use browser login state (also works across Gunicorn workers)."""
+
+    state_hash = models.CharField(max_length=64, unique=True)
+    nonce = models.CharField(max_length=64)
+    client_state = models.CharField(max_length=64)
+    code_challenge = models.CharField(max_length=43)
+    return_url = models.CharField(max_length=512)
+    expires_at = models.DateTimeField(db_index=True)
+    status = models.CharField(max_length=16, default='pending')
+    exchange_hash = models.CharField(max_length=64, null=True, unique=True)
+    user = models.ForeignKey(User, null=True, on_delete=models.CASCADE)
+    credential = models.ForeignKey('AppleCredential', null=True, on_delete=models.CASCADE)
+
+
+class AppleCredential(models.Model):
+    """One Apple authorization and its encrypted server-only token response."""
+
+    user = models.ForeignKey(User, related_name='apple_credentials', on_delete=models.CASCADE)
+    session_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    client_id = models.CharField(max_length=255)
+    token_response = models.TextField(editable=False)
+    verified_at = models.DateTimeField()
+    checked_at = models.DateTimeField(null=True)
+    invalidated_at = models.DateTimeField(null=True)
+    apple_revoked_at = models.DateTimeField(null=True)

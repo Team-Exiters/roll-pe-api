@@ -57,6 +57,7 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = '__all__'
         extra_kwargs = {
+            'email': {'required': True, 'allow_blank': False, 'allow_null': False},
             'is_test': {'write_only': True}  # 클라이언트로부터 읽지 못하도록 설정
         }
 
