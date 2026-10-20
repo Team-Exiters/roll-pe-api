@@ -1,5 +1,7 @@
 from django.shortcuts import redirect
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
+from functools import partial
 
 from rest_framework.views import APIView
 from rest_framework.decorators import api_view
@@ -9,15 +11,17 @@ from utils.env import return_env_value
 from utils.response import Response
 from utils.functions import create_idenfy_number
 from .models import User
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from .apple_sessions import (
     AppleAuthenticationError, AppleUnavailable, apple_user, exchange_apple_code,
     save_credential, verify_identity_token,
 )
+from .social_browser import SocialAuthenticationError, kakao_profile, social_identity, verified_email
 
 
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
+from google.auth import exceptions as google_exceptions
 
 import requests
 
@@ -25,8 +29,15 @@ import requests
 @api_view(['POST'])
 def social_login(request, provider):
 
+    if provider not in ('google', 'kakao', 'apple'):
+        return Response(msg='지원하지 않는 로그인 방식입니다.', status=404)
+
     code = request.data.get('code')
     access = request.data.get('accessToken')
+    if ((code is not None and (not isinstance(code, str) or len(code) > 2048))
+        or (access is not None and (not isinstance(access, str) or len(access) > 20000))
+        or not (code or access)):
+        return Response(msg='올바르지 않은 소셜 로그인 요청입니다.', status=400)
     apple_credential = None
     # code = request.GET.get('code')
     
@@ -34,11 +45,27 @@ def social_login(request, provider):
 
         case "kakao":
             
-            user_instance, created = kakao_login(request, code, access)
+            try:
+                user_instance, created = kakao_login(request, code, access)
+            except SocialAuthenticationError as error:
+                return native_social_error(error)
+            except ImproperlyConfigured:
+                return Response(msg='카카오 로그인을 잠시 사용할 수 없습니다.', status=503)
+            except IntegrityError:
+                return Response(msg='로그인 요청이 겹쳤습니다. 다시 시도해주세요.', status=400)
         
         case "google":
 
-            user_instance, created = google_login(request, code, access)
+            try:
+                user_instance, created = google_login(request, code, access)
+            except SocialAuthenticationError as error:
+                return native_social_error(error)
+            except (google_exceptions.TransportError, requests.RequestException, ImproperlyConfigured):
+                return Response(msg='구글 인증 서버에 연결하지 못했습니다.', status=503)
+            except (ValueError, google_exceptions.GoogleAuthError):
+                return Response(msg='구글 인증 정보를 확인할 수 없습니다.', status=400)
+            except IntegrityError:
+                return Response(msg='로그인 요청이 겹쳤습니다. 다시 시도해주세요.', status=400)
 
         case "apple":
 
@@ -48,6 +75,9 @@ def social_login(request, provider):
                 return Response(msg=str(error), status=400)
             except AppleUnavailable:
                 return Response(msg='애플 인증 설정이나 서버 연결을 확인해주세요.', status=503)
+
+    if not user_instance.is_active:
+        return Response(msg='로그인할 수 없는 계정입니다.', status=400)
 
     if created and provider != 'apple':
         user_instance.set_unusable_password()  # 비밀번호 없이 로그인 불가하도록 설정
@@ -71,6 +101,15 @@ def social_login(request, provider):
     }
 
     return Response(data=tokens, status=200)
+
+
+def native_social_error(error):
+    messages = {
+        'email_required': '로그인하려면 이메일 제공에 동의해주세요.',
+        'account_conflict': '이미 다른 로그인 방식으로 가입된 이메일입니다.',
+        'account_inactive': '로그인할 수 없는 계정입니다.',
+    }
+    return Response(msg=messages.get(error.code, '소셜 인증 정보를 확인할 수 없습니다.'), status=400)
 
 def get_tokens_for_user(user, apple_credential=None):
     refresh = RefreshToken.for_user(user)
@@ -104,24 +143,40 @@ def kakao_login(request, code, access):
 
         access_token = kakao_token.get("access_token")
     else:
-        access_token = access
+        return native_kakao_login(request, access)
         
-    user_kakao_account = requests.get(
-        "https://kapi.kakao.com/v2/user/me",
-        headers={"Authorization": f"Bearer {access_token}"},
-    ).json()
+    profile = kakao_profile(access_token)
+    with transaction.atomic():
+        identity = social_identity(request, 'kakao', profile)
+        return identity.user, False
 
-    # user_kakao_account에서email 가져오기
-    user_name = user_kakao_account['kakao_account']['profile']['nickname']
-    user_email = user_kakao_account['kakao_account']['email']
-    
-    # 가져온 이메일로 사용자 생성 및 조회후 return user_instance 
-    user, created = User.objects.get_or_create(
-        email=user_email,
-        defaults={'name': user_name,'email':user_email}
-    )
 
-    return user, created
+def native_kakao_login(request, access):
+    # A native bearer token must belong to this Kakao app, not just any valid Kakao app.
+    if not isinstance(access, str) or not access or len(access) > 8192:
+        raise SocialAuthenticationError()
+    configured_app = getattr(settings, 'KAKAO_AUTH_APP_ID', '')
+    if not str(configured_app).isdecimal() or int(configured_app) <= 0:
+        raise ImproperlyConfigured('Kakao app ID is not configured.')
+    try:
+        response = requests.get('https://kapi.kakao.com/v1/user/access_token_info',
+                                headers={'Authorization': f'Bearer {access}'}, timeout=5,
+                                allow_redirects=False)
+        response.raise_for_status()
+        info = response.json()
+        if (response.status_code != 200 or not isinstance(info, dict)
+            or type(info.get('app_id')) is not int or info['app_id'] != int(configured_app)
+            or type(info.get('id')) is not int or info['id'] <= 0
+            or type(info.get('expires_in')) is not int or info['expires_in'] <= 0):
+            raise SocialAuthenticationError()
+    except (requests.RequestException, ValueError, TypeError):
+        raise SocialAuthenticationError() from None
+    profile = kakao_profile(access)
+    if profile['subject'] != str(info['id']):
+        raise SocialAuthenticationError()
+    with transaction.atomic():
+        identity = social_identity(request, 'kakao', profile)
+        return identity.user, False
 
 def google_login(request, code, access):
 
@@ -155,9 +210,31 @@ def google_login(request, code, access):
     else:
         # 앱에서
         google_id_token = access
-        client_id = return_env_value("IOS_GOOGLE_OAUTH_CLIENT_KEY")
-        decoded_token = id_token.verify_oauth2_token(google_id_token, google_requests.Request(), client_id)
-        user_data = decoded_token
+        if not isinstance(google_id_token, str) or not google_id_token or len(google_id_token) > 20000:
+            raise SocialAuthenticationError()
+        try:
+            ios_client_id = return_env_value("IOS_GOOGLE_OAUTH_CLIENT_KEY")
+        except ImproperlyConfigured:
+            ios_client_id = ''
+        # Android SDK requests tokens for our web client; original iOS clients keep their audience.
+        client_ids = [value for value in (ios_client_id, getattr(settings, 'GOOGLE_AUTH_CLIENT_ID', '')) if value]
+        if not client_ids:
+            raise ImproperlyConfigured('Google client IDs are not configured.')
+        claims = id_token.verify_oauth2_token(
+            google_id_token, partial(google_requests.Request(), timeout=10), client_ids,
+        )
+        subject = claims.get('sub')
+        if not isinstance(subject, str) or not 0 < len(subject) <= 255 or not subject.isascii():
+            raise SocialAuthenticationError()
+        profile = {
+            'subject': subject,
+            'email': verified_email(claims.get('email'),
+                                    claims.get('email_verified') is True or claims.get('email_verified') == 'true'),
+            'name': claims.get('name', ''),
+        }
+        with transaction.atomic():
+            identity = social_identity(request, 'google', profile)
+            return identity.user, False
 
     user_name = user_data.get('name')  # 사용자 이름은 'name' 필드에 있음
     user_email = user_data.get('email')  # 이메일은 'email' 필드에 있음
