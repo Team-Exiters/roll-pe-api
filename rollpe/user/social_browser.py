@@ -92,7 +92,8 @@ def social_start(request, provider):
         or not re.fullmatch(r'[A-Za-z0-9_-]{43}', challenge)
         or not re.fullmatch(r'[A-Za-z0-9_-]{32,64}', client_state)):
         return no_store(Response(status=400, msg='올바르지 않은 소셜 로그인 요청입니다.'))
-    if not all(config[key] for key in ('CLIENT_ID', 'CLIENT_SECRET', 'REDIRECT_URI')):
+    required = ('CLIENT_ID', 'REDIRECT_URI', 'CLIENT_SECRET') if provider == 'google' else ('CLIENT_ID', 'REDIRECT_URI')
+    if not all(config[key] for key in required):
         return no_store(Response(status=503, msg='소셜 로그인 서버 설정이 완료되지 않았습니다.'))
 
     state = secrets.token_urlsafe(32)
@@ -148,12 +149,15 @@ def google_profile(token, client_id, nonce):
 
 def exchange_provider_code(provider, code, flow):
     config = provider_settings(provider)
+    data = {
+        'grant_type': 'authorization_code', 'client_id': config['CLIENT_ID'],
+        'redirect_uri': config['REDIRECT_URI'], 'code': code,
+        'code_verifier': flow.provider_verifier,
+    }
+    if config['CLIENT_SECRET']:
+        data['client_secret'] = config['CLIENT_SECRET']
     try:
-        response = requests.post(PROVIDERS[provider][1], data={
-            'grant_type': 'authorization_code', 'client_id': config['CLIENT_ID'],
-            'client_secret': config['CLIENT_SECRET'], 'redirect_uri': config['REDIRECT_URI'],
-            'code': code, 'code_verifier': flow.provider_verifier,
-        }, timeout=10, allow_redirects=False)
+        response = requests.post(PROVIDERS[provider][1], data=data, timeout=10, allow_redirects=False)
         response.raise_for_status()
         tokens = response.json()
         if not isinstance(tokens, dict) or tokens.get('error') or response.status_code != 200:

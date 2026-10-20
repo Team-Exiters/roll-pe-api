@@ -122,11 +122,32 @@ class SocialBrowserTests(TestCase):
 
     def test_missing_configuration_fails_closed(self):
         for provider in ('google', 'kakao'):
-            for name in ('CLIENT_ID', 'CLIENT_SECRET', 'REDIRECT_URI'):
+            required = ('CLIENT_ID', 'CLIENT_SECRET', 'REDIRECT_URI') if provider == 'google' else ('CLIENT_ID', 'REDIRECT_URI')
+            for name in required:
                 with override_settings(**{f'{provider.upper()}_AUTH_{name}': ''}):
                     response = self.client.get(self.url('start', provider), self.params(provider))
                     self.assertEqual(response.status_code, 503)
         self.assertEqual(SocialAuthFlow.objects.count(), 0)
+
+    @override_settings(KAKAO_AUTH_CLIENT_SECRET='')
+    def test_kakao_with_console_secret_feature_off_does_not_send_an_empty_secret(self):
+        code, _, _ = self.complete('kakao')
+        self.assertNotIn('client_secret', self.post.call_args.kwargs['data'])
+        self.assertEqual(self.exchange('kakao', code).status_code, 200)
+
+    def test_configured_kakao_secret_is_sent_only_to_the_token_endpoint(self):
+        query, _ = self.start('kakao')
+        self.assertNotIn('client_secret', query)
+        self.callback('kakao', query['state'][0], code='code')
+        self.assertEqual(self.post.call_args.kwargs['data']['client_secret'], 'test-kakao-secret')
+
+    @override_settings(KAKAO_AUTH_CLIENT_SECRET='')
+    def test_kakao_provider_still_rejects_a_missing_secret_when_console_requires_it(self):
+        query, _ = self.start('kakao')
+        self.post.return_value = http_response({'error': 'invalid_client'}, status=401)
+        response = self.callback('kakao', query['state'][0], code='code')
+        self.assertIn('error=authentication_failed', response['Location'])
+        self.assertFalse(User.objects.exists())
 
     def test_complete_flow_returns_original_session_format_without_provider_tokens(self):
         for provider in ('google', 'kakao'):
