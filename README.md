@@ -1,5 +1,56 @@
 # roll-pe-api
 
+## Google·카카오 브라우저 로그인
+
+기존 iPhone용 `POST /api/user/social/login/google`, `POST /api/user/social/login/kakao`는 그대로 유지합니다. 웹용 인증은 아래 경로를 사용합니다. `{provider}`는 `google` 또는 `kakao`입니다.
+
+- `GET /api/user/social/login/{provider}/start`: `return_url`, `state`, `code_challenge`(S256)를 받고 인증 페이지로 이동합니다.
+- `GET /api/user/social/login/{provider}/callback`: 제공자의 인증 응답을 검증하고 클라이언트 복귀 주소로 일회용 교환 코드를 보냅니다.
+- `POST /api/user/social/login/{provider}/exchange`: JSON의 `code`, `code_verifier`를 검증한 뒤 기존 형식의 `data.access`, `data.refresh`, `data.user`를 반환합니다.
+
+개발자 콘솔에 등록할 **서버 콜백 주소**:
+
+| 서비스 | Redirect URI |
+| --- | --- |
+| Google 웹 OAuth 클라이언트 | `https://rollpe.mooo.com/api/user/social/login/google/callback` |
+| 카카오 REST API 키 | `https://rollpe.mooo.com/api/user/social/login/kakao/callback` |
+
+운영 서버의 기존 `rollpe/.env`에 다음 항목을 설정합니다. Google Client Secret과 카카오 Client Secret은 서버 전용이며 Expo의 `EXPO_PUBLIC_` 환경변수에 넣지 않습니다.
+
+```dotenv
+GOOGLE_AUTH_CLIENT_ID=발급받은_Google_웹_Client_ID
+GOOGLE_AUTH_CLIENT_SECRET=발급받은_Google_Client_Secret
+GOOGLE_AUTH_REDIRECT_URI=https://rollpe.mooo.com/api/user/social/login/google/callback
+GOOGLE_AUTH_RETURN_URLS=http://localhost:8081/auth/google
+
+KAKAO_AUTH_CLIENT_ID=카카오_REST_API_키
+KAKAO_AUTH_CLIENT_SECRET=카카오_Client_Secret
+KAKAO_AUTH_REDIRECT_URI=https://rollpe.mooo.com/api/user/social/login/kakao/callback
+KAKAO_AUTH_RETURN_URLS=http://localhost:8081/auth/kakao
+```
+
+- 카카오는 해당 REST API 키의 클라이언트 시크릿을 활성화하고, 최초 계정 연결에 사용할 이메일 동의항목을 설정합니다. 네이티브 앱 키와 REST API 키를 구분합니다.
+- 기존 서버 환경변수를 재사용할 수 있도록 Google 웹 ID는 `WEB_GOOGLE_OAUTH_CLIENT_KEY`, 시크릿은 기존 이름인 `GOOGLE_OAUTH_CLIENT_ID`, 카카오 REST API 키는 `SOCIAL_AUTH_KAKAO_CLIENT_ID`를 대체값으로 읽습니다. 위의 새 이름을 설정하면 새 값이 우선합니다. 기존 Google iOS ID 설정은 바꾸지 않습니다.
+- `*_AUTH_RETURN_URLS`는 인증 후 돌아갈 **클라이언트 주소** 허용 목록입니다. 쉼표로 구분하며 실제 웹 배포 후 해당 도메인의 `/auth/google`, `/auth/kakao`를 각각 추가합니다. 쿼리 문자열·fragment가 없는 정확한 복귀 주소를 사용합니다. 등록된 HTTP(S) origin만 해당 API의 CORS 허용 목록에도 추가됩니다.
+- 향후 Android 브라우저 로그인을 연결하면 각각 `reactnativerollpe://auth/google`, `reactnativerollpe://auth/kakao`를 해당 허용 목록에 추가합니다. 개발자 콘솔의 서버 콜백 주소는 그대로 유지합니다.
+- 인증 요청과 클라이언트 교환 모두 S256 PKCE로 연결하고, 서버 state는 한 번만 처리합니다. Google은 `openid email profile`만 요청하고 서명·issuer·audience·만료·nonce를 검증합니다. 카카오는 서버가 받은 액세스 토큰으로 사용자 ID와 이메일 인증 여부를 확인합니다.
+- 계정은 Google `sub`·카카오 사용자 ID로 식별합니다. 기존 계정과 처음 연결할 때만 같은 제공자의 인증된 이메일을 사용합니다. 다른 제공자/일반 이메일 계정, 이미 다른 subject와 연결된 계정, 비활성 계정에는 자동 연결하지 않습니다. 최초 연결 시 인증된 이메일이 없으면 `email_required`로 실패합니다.
+- 제공자 식별자는 SHA-256 해시로 조회하고 중복을 제한하여 DB의 문자열 collation에 관계없이 대소문자를 구분합니다. Google의 `email_verified`는 불리언 `true`와 문서에 명시된 문자열 `"true"`만 인증 완료로 처리합니다.
+- Google·카카오의 액세스/리프레시 토큰과 ID 토큰은 이 로그인 흐름에서 DB나 클라이언트에 저장하지 않습니다. 로그인 결과 URL에는 60초 동안 한 번만 교환할 수 있는 코드와 클라이언트 state만 넣습니다. 실패 시 `cancelled`, `authentication_failed`, `email_required`, `account_conflict`, `account_inactive` 중 하나를 반환합니다.
+- 인증 요청은 10분 동안 유효합니다. 만료된 `SocialAuthFlow` 레코드는 운영 중 주기적으로 정리합니다. 프록시·애플리케이션 로그에 콜백 쿼리 문자열과 토큰 요청 본문을 기록하지 않습니다.
+
+배포 시 코드와 서버 `.env`를 반영하고, 아래 명령이 성공한 뒤 실행 중인 API를 재시작합니다. `0006`은 인증 상태와 제공자 식별 정보를 위한 두 테이블을 추가하며 기존 회원 데이터를 변경하지 않습니다.
+
+```bash
+cd rollpe
+python manage.py check
+python manage.py migrate
+```
+
+실제 로그인에는 클라이언트의 `/auth/google`, `/auth/kakao` 콜백 화면과 위 `start`·`exchange` 호출 연결도 필요합니다. 서버 기능만 배포한 상태에서는 RN 웹의 Google·카카오 버튼이 활성화되지 않습니다.
+
+기준 문서: [Google 웹 OAuth](https://developers.google.com/identity/protocols/oauth2/web-server), [Google 사용자 식별·토큰 검증](https://developers.google.com/identity/openid-connect/openid-connect), [카카오 REST API](https://developers.kakao.com/docs/ko/kakaologin/rest-api).
+
 ## Apple 브라우저 로그인
 
 기존 iOS 로그인 API의 주소와 응답 형식을 유지하며, 웹·Android용 브라우저 인증 경로를 별도로 제공합니다.
@@ -45,6 +96,6 @@ Expo는 네이티브에서 SecureStore, 웹에서는 현재 탭의 sessionStorag
 
 ```bash
 cd rollpe
-python manage.py test user.tests.test_apple_browser user.tests.test_apple_sessions user.tests.test_signin user.tests.test_logout user.tests.test_change_password user.tests.test_signup --settings=config.test_settings
+python manage.py test user.tests.test_social_browser user.tests.test_apple_browser user.tests.test_apple_sessions user.tests.test_signin user.tests.test_logout user.tests.test_change_password user.tests.test_signup --settings=config.test_settings
 python manage.py makemigrations --check --dry-run --settings=config.test_settings
 ```

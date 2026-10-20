@@ -228,7 +228,23 @@ APPLE_AUTH_TOKEN_ENCRYPTION_KEYS = [
 APPLE_AUTH_RETURN_URLS = [
     value.strip() for value in os.environ.get('APPLE_AUTH_RETURN_URLS', '').split(',') if value.strip()
 ]
-for return_url in APPLE_AUTH_RETURN_URLS:
+GOOGLE_AUTH_CLIENT_ID = os.environ.get('GOOGLE_AUTH_CLIENT_ID', os.environ.get('WEB_GOOGLE_OAUTH_CLIENT_KEY', ''))
+GOOGLE_AUTH_CLIENT_SECRET = os.environ.get('GOOGLE_AUTH_CLIENT_SECRET', os.environ.get('GOOGLE_OAUTH_CLIENT_ID', ''))
+GOOGLE_AUTH_REDIRECT_URI = os.environ.get(
+    'GOOGLE_AUTH_REDIRECT_URI', 'https://rollpe.mooo.com/api/user/social/login/google/callback',
+)
+GOOGLE_AUTH_RETURN_URLS = [
+    value.strip() for value in os.environ.get('GOOGLE_AUTH_RETURN_URLS', '').split(',') if value.strip()
+]
+KAKAO_AUTH_CLIENT_ID = os.environ.get('KAKAO_AUTH_CLIENT_ID', os.environ.get('SOCIAL_AUTH_KAKAO_CLIENT_ID', ''))
+KAKAO_AUTH_CLIENT_SECRET = os.environ.get('KAKAO_AUTH_CLIENT_SECRET', '')
+KAKAO_AUTH_REDIRECT_URI = os.environ.get(
+    'KAKAO_AUTH_REDIRECT_URI', 'https://rollpe.mooo.com/api/user/social/login/kakao/callback',
+)
+KAKAO_AUTH_RETURN_URLS = [
+    value.strip() for value in os.environ.get('KAKAO_AUTH_RETURN_URLS', '').split(',') if value.strip()
+]
+for return_url in APPLE_AUTH_RETURN_URLS + GOOGLE_AUTH_RETURN_URLS + KAKAO_AUTH_RETURN_URLS:
     parts = urlsplit(return_url)
     if parts.scheme in ('http', 'https') and parts.netloc:
         origin = f'{parts.scheme}://{parts.netloc}'

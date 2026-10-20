@@ -117,3 +117,34 @@ class AppleCredential(models.Model):
     checked_at = models.DateTimeField(null=True)
     invalidated_at = models.DateTimeField(null=True)
     apple_revoked_at = models.DateTimeField(null=True)
+
+
+class SocialIdentity(models.Model):
+    """Verified provider subject; email is only used for a legacy account's first binding."""
+
+    provider = models.CharField(max_length=8, choices=[('google', 'Google'), ('kakao', 'Kakao')])
+    subject = models.CharField(max_length=255, editable=False)
+    subject_hash = models.CharField(max_length=64, editable=False)
+    user = models.ForeignKey(User, related_name='social_identities', on_delete=models.CASCADE)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['provider', 'subject_hash'], name='unique_social_subject'),
+            models.UniqueConstraint(fields=['user', 'provider'], name='unique_user_social_provider'),
+        ]
+
+
+class SocialAuthFlow(models.Model):
+    """Single-use browser authorization and client PKCE proof shared by all workers."""
+
+    provider = models.CharField(max_length=8, choices=[('google', 'Google'), ('kakao', 'Kakao')])
+    state_hash = models.CharField(max_length=64, unique=True)
+    nonce = models.CharField(max_length=64)
+    provider_verifier = models.CharField(max_length=128, editable=False)
+    client_state = models.CharField(max_length=64)
+    code_challenge = models.CharField(max_length=43)
+    return_url = models.CharField(max_length=512)
+    expires_at = models.DateTimeField(db_index=True)
+    status = models.CharField(max_length=16, default='pending')
+    exchange_hash = models.CharField(max_length=64, null=True, unique=True)
+    identity = models.ForeignKey(SocialIdentity, null=True, on_delete=models.CASCADE)

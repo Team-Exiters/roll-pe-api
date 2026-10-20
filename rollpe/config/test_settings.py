@@ -50,3 +50,11 @@ APPLE_AUTH_REDIRECT_URI = 'https://rollpe.mooo.com/api/user/social/login/apple/c
 APPLE_AUTH_RETURN_URLS = [
     'http://localhost:8081/auth/apple', 'reactnativerollpe://auth/apple',
 ]
+GOOGLE_AUTH_CLIENT_ID = 'test-web.apps.googleusercontent.com'
+GOOGLE_AUTH_CLIENT_SECRET = 'test-google-secret'
+GOOGLE_AUTH_REDIRECT_URI = 'https://rollpe.mooo.com/api/user/social/login/google/callback'
+GOOGLE_AUTH_RETURN_URLS = ['http://localhost:8081/auth/google', 'reactnativerollpe://auth/google']
+KAKAO_AUTH_CLIENT_ID = 'test-kakao-rest-key'
+KAKAO_AUTH_CLIENT_SECRET = 'test-kakao-secret'
+KAKAO_AUTH_REDIRECT_URI = 'https://rollpe.mooo.com/api/user/social/login/kakao/callback'
+KAKAO_AUTH_RETURN_URLS = ['http://localhost:8081/auth/kakao', 'reactnativerollpe://auth/kakao']
