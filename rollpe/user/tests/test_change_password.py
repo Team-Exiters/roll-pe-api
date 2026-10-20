@@ -57,3 +57,30 @@ class ChangePasswordTestCase(APITestCase):
         """
         response = self.client.patch(self.change_password_url, self.change_invalid_data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_invalid_refresh_does_not_change_password(self):
+        for refresh in (None, 'invalid', 123, {'token': 'invalid'}):
+            response = self.client.patch(self.change_password_url, {
+                'newPassword': 'replacement', 'refresh': refresh,
+            }, format='json')
+            self.assertEqual(response.status_code, 400)
+            self.assertTrue(User.objects.get(email='test@test.com').check_password('testpassword'))
+
+    def test_another_users_refresh_cannot_change_password_or_be_blacklisted(self):
+        from rest_framework_simplejwt.tokens import RefreshToken
+        other = User.objects.create_user(email='other@example.com', name='Other')
+        refresh = str(RefreshToken.for_user(other))
+        response = self.client.patch(self.change_password_url, {
+            'newPassword': 'replacement', 'refresh': refresh,
+        }, format='json')
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(User.objects.get(email='test@test.com').check_password('testpassword'))
+        RefreshToken(refresh)
+
+    def test_missing_or_malformed_password_is_rejected(self):
+        for password in (None, '', 123, []):
+            response = self.client.patch(self.change_password_url, {
+                **self.change_data, 'newPassword': password,
+            }, format='json')
+            self.assertEqual(response.status_code, 400)
+            self.assertTrue(User.objects.get(email='test@test.com').check_password('testpassword'))

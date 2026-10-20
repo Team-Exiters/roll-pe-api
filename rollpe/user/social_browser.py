@@ -1,7 +1,5 @@
 """Google/Kakao browser authorization; provider secrets and tokens stay on the server."""
 
-import base64
-import hashlib
 import json
 import logging
 import re
@@ -26,6 +24,7 @@ from google.oauth2 import id_token
 
 from utils.functions import create_idenfy_number
 from utils.response import Response
+from .oauth_utils import digest, no_store, pkce_challenge
 from .models import SocialAuthFlow, SocialIdentity, User
 
 logger = logging.getLogger(__name__)
@@ -39,20 +38,6 @@ class SocialAuthenticationError(ValueError):
     def __init__(self, code='authentication_failed'):
         self.code = code
         super().__init__(code)
-
-
-def digest(value):
-    return hashlib.sha256(value.encode()).hexdigest()
-
-
-def pkce_challenge(verifier):
-    return base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b'=').decode()
-
-
-def no_store(response):
-    response['Cache-Control'] = 'no-store'
-    response['Referrer-Policy'] = 'no-referrer'
-    return response
 
 
 def provider_settings(provider):
@@ -133,7 +118,9 @@ def google_profile(token, client_id, nonce):
         claims = id_token.verify_oauth2_token(token, partial(google_requests.Request(), timeout=10), client_id)
     except (ValueError, google_exceptions.GoogleAuthError):
         raise SocialAuthenticationError() from None
-    if (not isinstance(claims.get('nonce'), str)
+    if (not isinstance(claims, dict)
+        or not isinstance(claims.get('nonce'), str)
+        or not claims['nonce'].isascii()
         or not secrets.compare_digest(claims['nonce'], nonce)
         or not isinstance(claims.get('sub'), str) or not 0 < len(claims['sub']) <= 255
         or not claims['sub'].isascii()

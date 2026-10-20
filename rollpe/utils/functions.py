@@ -1,13 +1,15 @@
 import jwt
 import random
 import string
+from smtplib import SMTPException
 
 from datetime import datetime, timedelta
 
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from django.core.cache import cache
-from django.core.mail import send_mail
 from django.core.mail import EmailMultiAlternatives
+from django.contrib.auth.tokens import default_token_generator
 
 from user.models import User
 
@@ -60,9 +62,9 @@ def generate_send_email(request, email, path_code):
             case "password":
                 subject="롤페 비밀번호 찾기"
 
-                identify_code = User.objects.filter(email=email).values_list('identifyCode', flat=True).first()
-                activation_url = f"http://{settings.BASE_DOMAIN}/forgot-password/{identify_code}"
-                # activation_url = f"{request.scheme}://{settings.BASE_DOMAIN}/forgot-password?identifyCode={identify_code}"
+                user = User.objects.get(email=email, is_active=True, provider__isnull=True)
+                token = default_token_generator.make_token(user)
+                activation_url = f"https://{settings.BASE_DOMAIN}/forgot-password/{user.identifyCode}?token={token}"
 
                 html_content = (
                     '<p>비밀번호 찾기</p><br>'
@@ -72,12 +74,13 @@ def generate_send_email(request, email, path_code):
 
         msg = EmailMultiAlternatives(subject, '', from_email, to)
         msg.attach_alternative(html_content, "text/html")
-        msg.send()
+        if msg.send() != 1:
+            raise SMTPException()
         
         return Response(msg="이메일 전송 성공", status=200)
         
-    except Exception as e:
-        return Response(msg=f"이메일 전송 실패: {str(e)}", status=400)
+    except (SMTPException, OSError, ValueError, ImproperlyConfigured, User.DoesNotExist):
+        return Response(msg="이메일을 전송하지 못했습니다. 잠시 후 다시 시도해주세요.", status=503)
 
 def create_idenfy_number(request):
 

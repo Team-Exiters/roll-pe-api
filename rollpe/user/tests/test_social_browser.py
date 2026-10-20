@@ -364,3 +364,11 @@ class GoogleIdentityValidationTests(TestCase):
         with patch('google.oauth2.id_token._fetch_certs', return_value={'test-key': other_pem}):
             with self.assertRaises(SocialAuthenticationError):
                 google_profile(self.token(), 'test-web.apps.googleusercontent.com', 'expected-nonce')
+
+
+class MalformedGoogleClaimsTests(TestCase):
+    def test_non_ascii_nonce_and_non_object_claims_raise_authentication_error(self):
+        for claims in ({'nonce': '한글'}, None, []):
+            with patch('user.social_browser.id_token.verify_oauth2_token', return_value=claims):
+                with self.assertRaises(SocialAuthenticationError):
+                    google_profile('token', 'client', 'ascii-nonce')

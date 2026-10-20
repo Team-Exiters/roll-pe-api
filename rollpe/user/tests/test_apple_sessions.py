@@ -362,3 +362,30 @@ class AppleNativeCompatibilityTests(TestCase):
         response = self.client.post(self.url, {'code': 'native-code'}, format='json')
         self.assertEqual(response.status_code, 503)
         exchange.assert_not_called()
+
+class AppleProtocolRegressionTests(TestCase):
+    @override_settings(APPLE_AUTH_TEAM_ID='')
+    @patch('user.apple_sessions.jwt.encode')
+    def test_missing_team_id_cannot_sign_a_client_secret(self, encode):
+        from user.apple_sessions import AppleUnavailable, create_client_secret
+        with self.assertRaises(AppleUnavailable):
+            create_client_secret()
+        encode.assert_not_called()
+
+    @patch('user.apple_sessions.jwt.decode', return_value={'sub': 'subject', 'nonce': '다른값'})
+    @patch('user.apple_sessions.apple_keys.get_signing_key_from_jwt')
+    def test_unicode_nonce_mismatch_is_a_controlled_authentication_error(self, key, decode):
+        from user.apple_sessions import verify_identity_token
+        with self.assertRaises(AppleAuthenticationError):
+            verify_identity_token('token', 'client', 'expected')
+
+    @patch('user.apple_sessions.create_client_secret', return_value='test-secret')
+    @patch('user.apple_sessions.requests.post')
+    def test_code_exchange_does_not_accept_or_follow_redirects(self, post, secret):
+        from user.apple_sessions import exchange_apple_code
+        post.return_value = apple_response(status=302, payload={
+            'refresh_token': 'refresh', 'id_token': 'identity',
+        })
+        with self.assertRaises(AppleAuthenticationError):
+            exchange_apple_code('code', 'nonce')
+        self.assertFalse(post.call_args.kwargs['allow_redirects'])

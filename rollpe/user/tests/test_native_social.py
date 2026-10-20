@@ -165,3 +165,34 @@ class NativeSocialLoginTests(TestCase):
         self.assertEqual(self.login().status_code, 400)
         self.assertEqual(self.login('kakao').status_code, 400)
         self.assertEqual(self.login('unsupported', 'token').status_code, 404)
+
+    def test_non_object_json_is_rejected(self):
+        for payload in ([], None, 'token', 1):
+            response = self.client.post('/api/user/social/login/google', json.dumps(payload),
+                                        content_type='application/json')
+            self.assertEqual(response.status_code, 400)
+
+    def test_legacy_google_code_uses_verified_subject_and_email(self):
+        response = Mock(status_code=200)
+        response.json.return_value = {'id_token': self.token(aud='native-ios.apps.googleusercontent.com')}
+        with patch('user.apis_social.requests.post', return_value=response) as post:
+            result = self.client.post('/api/user/social/login/google', {'code': 'legacy-code'})
+            self.assertEqual(result.status_code, 200)
+            self.assertEqual(SocialIdentity.objects.get().subject, 'same-google-account')
+            self.assertEqual(post.call_args.kwargs['timeout'], 10)
+            self.assertFalse(post.call_args.kwargs['allow_redirects'])
+        response.json.return_value = {'id_token': self.token(email_verified=False, sub='other-subject')}
+        with patch('user.apis_social.requests.post', return_value=response):
+            self.assertEqual(self.client.post('/api/user/social/login/google', {'code': 'next-code'}).status_code, 400)
+        self.assertEqual(SocialIdentity.objects.count(), 1)
+
+    def test_legacy_code_provider_failures_are_rejected(self):
+        for provider in ('google', 'kakao'):
+            for body in ([], {'error': 'invalid_grant'}, {}):
+                response = Mock(status_code=200)
+                response.json.return_value = body
+                with patch('user.apis_social.requests.post', return_value=response):
+                    self.assertEqual(self.client.post(f'/api/user/social/login/{provider}', {'code': 'bad-code'}).status_code, 400)
+            with patch('user.apis_social.requests.post', side_effect=requests.Timeout()):
+                self.assertEqual(self.client.post(f'/api/user/social/login/{provider}', {'code': 'bad-code'}).status_code, 400)
+        self.assertFalse(User.objects.exists())

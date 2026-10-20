@@ -2,7 +2,6 @@ from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.views import APIView
 
-from engine.serializers import SearchCreateSerializer
 from paper.models import Paper
 from paper.serializer import UserShowPaperSerializer
 from utils.response import Response
@@ -11,10 +10,8 @@ from utils.response import Response
 class SearchAPI(APIView):
 	pagination_class = PageNumberPagination
 	def get(self, request):
-		filter = request.GET.get('f', None)
-		try:
-			keyword = request.GET.get('k')
-		except:
+		keyword = request.GET.get('k')
+		if keyword is None or not keyword.strip():
 			return Response(status=400, msg="Query Param k는 필수 요소입니다. (Keyword is Required)")
 
 		if request.user.is_anonymous:
