@@ -29,7 +29,9 @@ KAKAO_AUTH_REDIRECT_URI=https://rollpe.mooo.com/api/user/social/login/kakao/call
 KAKAO_AUTH_RETURN_URLS=http://localhost:8081/auth/kakao
 ```
 
-- 카카오는 해당 REST API 키의 클라이언트 시크릿을 활성화하고, 최초 계정 연결에 사용할 이메일 동의항목을 설정합니다. 네이티브 앱 키와 REST API 키를 구분합니다.
+- Google은 현재 서버 인가 코드 교환 방식이므로 웹 Client Secret이 필요합니다. Google Identity Services의 ID 토큰을 받아 검증하는 방식은 별도 구현이며 이 서버 콜백 방식과 구분합니다.
+- 카카오는 해당 REST API 키의 클라이언트 시크릿 기능이 ON이면 `KAKAO_AUTH_CLIENT_SECRET`에 해당 값을 설정합니다. OFF이면 이 환경변수를 생략하거나 비워둘 수 있으며 토큰 요청에서도 `client_secret`을 생략합니다. 새 REST API 키는 시크릿 기능이 기본 활성화되고, 공식 문서에서도 사용을 권장합니다. 서버가 콘솔 설정을 바꾸지는 않습니다.
+- 카카오의 최초 계정 연결에 사용할 이메일 동의항목을 설정합니다. 네이티브 앱 키와 REST API 키를 구분합니다.
 - 기존 서버 환경변수를 재사용할 수 있도록 Google 웹 ID는 `WEB_GOOGLE_OAUTH_CLIENT_KEY`, 시크릿은 기존 이름인 `GOOGLE_OAUTH_CLIENT_ID`, 카카오 REST API 키는 `SOCIAL_AUTH_KAKAO_CLIENT_ID`를 대체값으로 읽습니다. 위의 새 이름을 설정하면 새 값이 우선합니다. 기존 Google iOS ID 설정은 바꾸지 않습니다.
 - `*_AUTH_RETURN_URLS`는 인증 후 돌아갈 **클라이언트 주소** 허용 목록입니다. 쉼표로 구분하며 실제 웹 배포 후 해당 도메인의 `/auth/google`, `/auth/kakao`를 각각 추가합니다. 쿼리 문자열·fragment가 없는 정확한 복귀 주소를 사용합니다. 등록된 HTTP(S) origin만 해당 API의 CORS 허용 목록에도 추가됩니다.
 - 향후 Android 브라우저 로그인을 연결하면 각각 `reactnativerollpe://auth/google`, `reactnativerollpe://auth/kakao`를 해당 허용 목록에 추가합니다. 개발자 콘솔의 서버 콜백 주소는 그대로 유지합니다.
