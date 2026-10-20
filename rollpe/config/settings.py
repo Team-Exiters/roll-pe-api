@@ -197,7 +197,7 @@ EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = 'team.exiters@gmail.com'
-EMAIL_HOST_PASSWORD = 'sxdwbfnuezydmpcm'
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
 # EMAIL_HOST_USER = return_env_value('EMAIL_USER')
 # EMAIL_HOST_PASSWORD = return_env_value('EMAIL_PASSWORD')
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
@@ -211,13 +211,13 @@ CORS_ALLOWED_ORIGINS = [
 ]
 CORS_ALLOW_CREDENTIALS = True
 
-BASE_DOMAIN = 'localhost:3000'
-API_DOMAIN = 'dev.popping.world'
+BASE_DOMAIN = os.environ.get('BASE_DOMAIN', 'localhost:3000')
+API_DOMAIN = os.environ.get('API_DOMAIN', 'dev.popping.world')
 
 # Apple browser authentication. Keep the private key only on the API server.
 # return_env_value above loads rollpe/.env before these values are read.
 APPLE_AUTH_CLIENT_ID = os.environ.get('APPLE_AUTH_CLIENT_ID', '')
-APPLE_AUTH_NATIVE_CLIENT_ID = os.environ.get('APP_APPLE_BUNDEL_ID', '')
+APPLE_AUTH_NATIVE_CLIENT_ID = os.environ.get('APPLE_AUTH_NATIVE_CLIENT_ID', os.environ.get('APP_APPLE_BUNDEL_ID', ''))
 APPLE_AUTH_TEAM_ID = os.environ.get('APPLE_AUTH_TEAM_ID', '')
 APPLE_AUTH_KEY_ID = os.environ.get('APPLE_AUTH_KEY_ID', '')
 APPLE_AUTH_PRIVATE_KEY_FILE = os.environ.get('APPLE_AUTH_PRIVATE_KEY_FILE', '')
@@ -251,3 +251,6 @@ for return_url in APPLE_AUTH_RETURN_URLS + GOOGLE_AUTH_RETURN_URLS + KAKAO_AUTH_
         origin = f'{parts.scheme}://{parts.netloc}'
         if origin not in CORS_ALLOWED_ORIGINS:
             CORS_ALLOWED_ORIGINS.append(origin)
+
+# Password reset links expire after 30 minutes.
+PASSWORD_RESET_TIMEOUT = 1800

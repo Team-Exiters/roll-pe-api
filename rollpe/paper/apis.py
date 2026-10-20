@@ -1,10 +1,10 @@
-from django.contrib.auth.hashers import check_password, make_password
+from django.contrib.auth.hashers import check_password
+from django.core.exceptions import ValidationError
 from rest_framework import status
-from rest_framework.decorators import api_view
 from rest_framework.pagination import PageNumberPagination
 
 from heart.models import Heart
-from paper.serializer import UserShowPaperSerializer, PaperCreateSerializer, PaperSerializer, QueryIndexSerializer, \
+from paper.serializer import UserShowPaperSerializer, PaperCreateSerializer, QueryIndexSerializer, \
 	QueryIndexCreateSerializer
 from user.models import User
 from utils.response import Response
@@ -43,9 +43,11 @@ class UserPaperAPI(APIView):
 
 
 	def post(self, request):
-		serializer = PaperCreateSerializer(data=request.data)
+		if not request.user.is_authenticated:
+			return Response(status=status.HTTP_401_UNAUTHORIZED)
+		serializer = PaperCreateSerializer(data=request.data, context={'request': request})
 		if serializer.is_valid():
-			paper = serializer.save()
+			paper = serializer.save(hostFK=request.user)
 			return Response(
 				data=PaperCreateSerializer(paper).data,
 				status=status.HTTP_201_CREATED
@@ -57,8 +59,18 @@ class UserPaperAPI(APIView):
 		"""
 		Paper 삭제
 		"""
-		user = User.objects.get(pk=request.user.id)
-		paper = Paper.objects.get(code=request.data['pcode'])
+		if not request.user.is_authenticated:
+			return Response(status=status.HTTP_401_UNAUTHORIZED)
+		user = request.user
+		pcode = request.data.get('pcode')
+		if not pcode:
+			return Response(status=400, msg="pcode가 필요합니다.")
+		try:
+			paper = Paper.objects.get(code=pcode)
+		except (ValidationError, ValueError, TypeError):
+			return Response(status=400, msg="올바르지 않은 pcode입니다.")
+		except Paper.DoesNotExist:
+			return Response(status=404)
 
 		if paper.hostFK == user:
 			paper.delete()
@@ -156,6 +168,8 @@ class PaperAPI(APIView):
 		try:
 			paper = Paper.objects.get(code=pcode)
 
+		except (ValidationError, ValueError, TypeError):
+			return Response(status=400, msg="올바르지 않은 pcode입니다.")
 		except Paper.DoesNotExist as e:
 			return Response(msg=str(e), status=status.HTTP_404_NOT_FOUND)
 
@@ -169,9 +183,11 @@ class PaperAPI(APIView):
 			return Response(status=471)
 
 	def post(self, request):
-		serializer = PaperCreateSerializer(data=request.data)
+		if not request.user.is_authenticated:
+			return Response(status=status.HTTP_401_UNAUTHORIZED)
+		serializer = PaperCreateSerializer(data=request.data, context={'request': request})
 		if serializer.is_valid():
-			paper = serializer.save()
+			paper = serializer.save(hostFK=request.user)
 			# paper만든 순간 본인도 paper_invite_user에 insert
 			paper.invitingUser.add(request.user)
 			return Response(
@@ -198,6 +214,8 @@ class PaperEnterManageAPI(APIView):
 
 		try:
 			paper = Paper.objects.get(code=pcode)
+		except (ValidationError, ValueError, TypeError):
+			return Response(status=400, msg="올바르지 않은 pcode입니다.")
 		except Paper.DoesNotExist as e:
 			return Response(msg=str(e), status=status.HTTP_404_NOT_FOUND)
 
@@ -229,90 +247,6 @@ class PaperEnterManageAPI(APIView):
 				return Response(status=472)
 
 
-class PaperPasswordAPI(APIView):
-	def post(self, request):
-		"""
-		Paper Password Change Check
-
-		requirement: pcode, original_password
-		"""
-		pcode = request.data.get('pcode', None)
-		original_password = request.data.get('original_password', None)
-
-		if pcode is None:
-			return Response(
-				msg="pcode가 필요합니다.",
-				status=status.HTTP_404_NOT_FOUND
-				)
-
-		if original_password is None:
-			return Response(
-				msg="기존 패스워드가 필요합니다.",
-				status=status.HTTP_404_NOT_FOUND
-				)
-
-		paper = Paper.objects.get(code=pcode)
-
-		if not check_password(original_password, paper.password):
-			return Response(
-				msg="기존 비밀번호와 다릅니다.",
-				status=472
-				)
-
-		return Response(status=status.HTTP_200_OK)
-
-
-	def put(self, request):
-		"""
-		Paper Password Change
-
-		Requirement: pcode, original_password, change_password
-		"""
-		pcode = request.data.get('pcode', None)
-		original_password = request.data.get('original_password', None)
-		change_password = request.data.get('change_password', None)
-
-		if pcode is None:
-			return Response(
-				msg="pcode가 필요합니다.",
-				status=status.HTTP_404_NOT_FOUND
-				)
-
-		if original_password is None:
-			return Response(
-				msg="기존 패스워드가 필요합니다.",
-				status=status.HTTP_404_NOT_FOUND
-				)
-
-		if change_password is None:
-			return Response(
-				msg="변경 패스워드가 필요합니다.",
-				status=status.HTTP_404_NOT_FOUND
-				)
-
-		if original_password == change_password:
-			return Response(
-				msg="변경하려는 패스워드가 기존 패스워드와 일치합니다.",
-				status=status.HTTP_404_NOT_FOUND
-				)
-
-		paper = Paper.objects.get(code=pcode)
-
-		if not check_password(original_password, paper.password):
-			return Response(
-				msg="기존 비밀번호와 다릅니다.",
-				status=472
-				)
-
-		paper.password = make_password(change_password)
-		paper.save()
-
-		return Response(
-			msg="패스워드 변경 성공",
-			status=status.HTTP_204_NO_CONTENT
-			)
-
-
 class QueryIndexAPI(APIView):
 	def get(self, request):
 
@@ -334,6 +268,10 @@ class QueryIndexAPI(APIView):
 		)
 
 	def post(self, request):
+		if not request.user.is_authenticated:
+			return Response(status=status.HTTP_401_UNAUTHORIZED)
+		if not request.user.is_staff:
+			return Response(status=status.HTTP_403_FORBIDDEN)
 		serializer = QueryIndexCreateSerializer(data=request.data)
 		if serializer.is_valid():
 			index = serializer.save()
@@ -342,31 +280,3 @@ class QueryIndexAPI(APIView):
 				status=status.HTTP_201_CREATED
 				)
 		return Response(data=serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-
-
-
-
-
-# TODO 1. [] 롤페 나가기
-@api_view(['DELETE', 'POST'])
-def quit_paper(request):
-	pass
-
-# TODO 2. [] 롤페 전달하기 (reciver에게 전송)
-# TODO 3. [] 참여자(초대된 유저) 강퇴
-@api_view(['POST'])
-def kick_user(request):
-	user = request.user
-	if user.is_anonymous:
-		return Response(status=status.HTTP_401_UNAUTHORIZED)
-
-
-
-# TODO 4. [] 롤페 종료 (삭제)
-@api_view(['DELETE', 'POST'])
-def delete_paper(request):
-	pass
-
-# 2025.04.11 김태은

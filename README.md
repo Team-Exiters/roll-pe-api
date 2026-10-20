@@ -38,7 +38,7 @@ KAKAO_AUTH_RETURN_URLS=http://localhost:8081/auth/kakao
 - 네이티브 Google·카카오도 `SocialIdentity`로 웹과 같은 계정을 조회합니다. 기존 같은 공급자의 회원은 검증된 이메일로 최초 연결하고, 이후 공급자의 사용자 ID로 조회합니다. 다른 로그인 방식의 회원과 비활성 회원은 연결하지 않습니다. 기존 iOS 요청 필드(`accessToken`)와 응답 형식은 유지하며 `0006` 이후 새 마이그레이션은 없습니다.
 - 네이티브 카카오는 `/v1/user/access_token_info`로 발급 앱 ID·만료 여부·회원번호를 확인한 뒤 사용자 정보를 조회합니다. `KAKAO_AUTH_APP_ID`는 카카오 디벨로퍼스에 표시되는 숫자 앱 ID이며 REST API 키나 네이티브 앱 키가 아닙니다. 이 값이 없으면 네이티브 카카오 로그인은 503으로 거절하므로 기존 iOS 앱을 포함해 서버 배포 전에 설정합니다. 웹은 서버가 직접 인가 코드를 교환하므로 이 추가 설정과 독립적입니다.
 - `*_AUTH_RETURN_URLS`는 인증 후 돌아갈 **클라이언트 주소** 허용 목록입니다. 쉼표로 구분하며 실제 웹 배포 후 해당 도메인의 `/auth/google`, `/auth/kakao`를 각각 추가합니다. 쿼리 문자열·fragment가 없는 정확한 복귀 주소를 사용합니다. 등록된 HTTP(S) origin만 해당 API의 CORS 허용 목록에도 추가됩니다.
-- 향후 Android 브라우저 로그인을 연결하면 각각 `reactnativerollpe://auth/google`, `reactnativerollpe://auth/kakao`를 해당 허용 목록에 추가합니다. 개발자 콘솔의 서버 콜백 주소는 그대로 유지합니다.
+- 향후 Android 브라우저 로그인을 연결하면 각각 `rollpe://auth/google`, `rollpe://auth/kakao`를 해당 허용 목록에 추가합니다. 개발자 콘솔의 서버 콜백 주소는 그대로 유지합니다.
 - 인증 요청과 클라이언트 교환 모두 S256 PKCE로 연결하고, 서버 state는 한 번만 처리합니다. Google은 `openid email profile`만 요청하고 서명·issuer·audience·만료·nonce를 검증합니다. 카카오는 서버가 받은 액세스 토큰으로 사용자 ID와 이메일 인증 여부를 확인합니다.
 - 계정은 Google `sub`·카카오 사용자 ID로 식별합니다. 기존 계정과 처음 연결할 때만 같은 제공자의 인증된 이메일을 사용합니다. 다른 제공자/일반 이메일 계정, 이미 다른 subject와 연결된 계정, 비활성 계정에는 자동 연결하지 않습니다. 최초 연결 시 인증된 이메일이 없으면 `email_required`로 실패합니다.
 - 제공자 식별자는 SHA-256 해시로 조회하고 중복을 제한하여 DB의 문자열 collation에 관계없이 대소문자를 구분합니다. Google의 `email_verified`는 불리언 `true`와 문서에 명시된 문자열 `"true"`만 인증 완료로 처리합니다.
@@ -68,9 +68,9 @@ python manage.py migrate
 배포 전 준비:
 
 1. 서버의 기존 `rollpe/.env`에 `APPLE_AUTH_CLIENT_ID`와 `APPLE_AUTH_REDIRECT_URI`를 설정합니다. Services ID는 Apple Developer에 등록한 실제 값을 사용하며, Apple에 등록한 Return URL은 `https://rollpe.mooo.com/api/user/social/login/apple/callback`입니다.
-2. 서버의 기존 키를 사용해 `APPLE_AUTH_TEAM_ID`, `APPLE_AUTH_KEY_ID`, `APPLE_AUTH_PRIVATE_KEY_FILE`을 설정합니다. 기존 iOS API에는 `APP_APPLE_BUNDEL_ID`도 필요합니다. 키 파일은 저장소와 Expo 환경변수에 넣지 않습니다.
+2. 서버의 기존 키를 사용해 `APPLE_AUTH_TEAM_ID`, `APPLE_AUTH_KEY_ID`, `APPLE_AUTH_PRIVATE_KEY_FILE`을 설정합니다. 네이티브 Client ID는 `APPLE_AUTH_NATIVE_CLIENT_ID=dev.hugesilver.Roll-Pe`로 설정합니다. 기존 `APP_APPLE_BUNDEL_ID`도 대체값으로 지원하며 새 이름이 우선합니다. Team ID는 앱과 연결된 실제 팀(`42NW282TDP`)인지 확인합니다. 키 파일은 저장소와 Expo 환경변수에 넣지 않습니다.
 3. `APPLE_AUTH_TOKEN_ENCRYPTION_KEYS`에 서버에서 생성한 Fernet 키를 설정합니다. Apple 토큰 응답을 DB에 암호화해 보관하는 용도이며, `.p8` 키와는 별개입니다. 쉼표로 여러 키를 지정하면 첫 번째 키로 암호화하고 나머지 키도 복호화에 사용합니다. 기존 토큰을 읽을 수 있도록 키를 백업하고 교체 시 이전 키도 유지합니다.
-4. `APPLE_AUTH_RETURN_URLS`에는 서버 검증 후 돌아갈 앱·웹 주소만 정확히 나열합니다. 로컬 웹은 `http://localhost:8081/auth/apple`, 네이티브 앱은 `reactnativerollpe://auth/apple`입니다. 실제 웹 도메인 배포 시 해당 도메인의 `/auth/apple`을 추가합니다.
+4. `APPLE_AUTH_RETURN_URLS`에는 서버 검증 후 돌아갈 앱·웹 주소만 정확히 나열합니다. 로컬 웹은 `http://localhost:8081/auth/apple`, 네이티브 앱은 `rollpe://auth/apple`입니다. 실제 웹 도메인 배포 시 해당 도메인의 `/auth/apple`을 추가합니다.
 5. 코드와 설정을 서버에 반영한 뒤 `python manage.py migrate`로 `0004`·`0005` 마이그레이션을 적용하고 API를 재시작합니다. 기존 회원 데이터는 유지됩니다.
 6. Expo의 로컬 `.env.local` 또는 EAS 환경변수에 `EXPO_PUBLIC_API_URL=https://rollpe.mooo.com`을 설정하고, 서버 배포 후 `EXPO_PUBLIC_APPLE_SIGN_IN_ENABLED=true`로 활성화합니다. Crypto/SecureStore를 포함한 네이티브 앱은 새 개발 빌드가 필요합니다.
 
@@ -102,6 +102,37 @@ Expo는 네이티브에서 SecureStore, 웹에서는 현재 탭의 sessionStorag
 
 ```bash
 cd rollpe
-python manage.py test user.tests.test_social_browser user.tests.test_apple_browser user.tests.test_apple_sessions user.tests.test_signin user.tests.test_logout user.tests.test_change_password user.tests.test_signup --settings=config.test_settings
+python manage.py test --settings=config.test_settings
 python manage.py makemigrations --check --dry-run --settings=config.test_settings
 ```
+
+## 운영 설정 점검과 만료 상태 정리
+
+```bash
+cd rollpe
+python manage.py check_social_auth
+python manage.py cleanup_auth_flows --limit 1000
+# 미리보기 확인 후 만료된 지 24시간이 지난 상태만 삭제 (모델별 최대 1000개)
+python manage.py cleanup_auth_flows --apply --limit 1000 --older-than-hours 24
+```
+
+설정 점검은 값·키 내용을 출력하지 않고 DB나 외부 서버에 접속하지 않습니다. 설정 존재 여부, 키 파일 읽기 가능 여부와 Fernet 키 형식만 확인하므로 실제 인증 성공을 보장하지 않습니다. 기본 Django 설정 로딩에는 기존 운영 환경설정이 필요합니다.
+
+기존 Apple `identityToken` 검증은 공개 JWKS와 네이티브 Client ID를 사용하며 `.p8` 자체는 필요하지 않습니다. 새 네이티브 인가 코드 교환·자동 토큰 폐기에는 Team ID, Key ID, `.p8`, 토큰 암호화 키가 추가로 필요합니다. 브라우저 로그인에는 Services ID·서버 Return URL·클라이언트 복귀 허용 목록도 필요합니다. 네이티브 Client ID 하나만 설정된 상태는 전체 Apple 인증 설정 완료가 아닙니다. 서명·암호화·Client Secret은 서버 전용입니다.
+
+정리 명령은 기본적으로 미리보기입니다. `--apply`는 `AppleAuthFlow`·`SocialAuthFlow`의 만료된 임시 상태만 지우며 회원·제공자 연결·Apple 자격 증명은 보존합니다. 모델별 제한은 1~10000개, 만료 후 보존 기간은 최소 1시간입니다. 실제 운영 실행·주기 등록은 별도로 판단합니다.
+
+## 비밀번호 재설정
+
+이메일 재설정 요청(`POST /api/user/forgot-password`)은 유지합니다. 메일의 HTTPS 링크는 `/forgot-password/{identifyCode}?token=...` 형식이며 30분 동안 유효합니다. 재설정 웹 화면은 쿼리의 `token`을 보존하고 `PATCH /api/user/forgot-password`에 `identifyCode`, `newPassword`, `token`을 함께 전송해야 합니다. 공개 식별자인 `identifyCode`만으로는 비밀번호를 바꿀 수 없습니다. 웹 재설정 화면은 이 저장소에 없으므로 서버 배포 시 해당 화면의 토큰 전달도 확인해야 합니다.
+
+## 배포 전 메일 설정
+
+`EMAIL_HOST_PASSWORD`는 이제 서버 환경변수 또는 기존 서버 `rollpe/.env`에 반드시 설정해야 합니다. 이 설정 없이 배포하면 인증·재설정 메일을 보낼 수 없습니다. 로컬에 보관한 값은 서버에 자동 반영되지 않습니다. 이전에 저장소에 포함된 SMTP 자격 증명은 노출된 것으로 취급해 교체하고 새 값은 서버에만 보관합니다.
+
+`API_DOMAIN`은 이메일 인증 링크를 받는 실제 API 호스트, `BASE_DOMAIN`은 비밀번호 재설정 화면의 실제 웹 호스트로 설정합니다(스킴 없이 호스트와 필요한 포트만 지정). 기존 기본값은 호환을 위해 유지되며 현재 기본값만으로 운영 링크가 준비되었다고 판단하면 안 됩니다. 실제 재설정 웹 호스트는 아직 확정되지 않았으므로 배포 전에 설정과 링크를 확인해야 합니다.
+
+## 요청 처리 변경
+
+- 회원가입은 권한 필드와 `is_test`를 무시하고 항상 이메일 인증을 요구합니다. 메일 발송 실패 시 회원을 만들지 않고 `503`을 반환합니다.
+- 롤페 생성은 로그인한 사용자를 호스트로 지정합니다. `/api/index`의 `POST`는 staff만 사용할 수 있으며 `GET`은 기존 동작을 유지합니다.

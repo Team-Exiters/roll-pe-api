@@ -36,6 +36,25 @@ class AppleBrowserTests(TestCase):
         query = parse_qs(urlsplit(response['Location']).query)
         return query, AppleAuthFlow.objects.get(state_hash=digest(query['state'][0]))
 
+    def test_duplicate_start_parameters_do_not_create_flow(self):
+        params = {
+            'return_url': self.return_url, 'state': [self.client_state, 'x' * 43],
+            'code_challenge': pkce_challenge(self.verifier),
+        }
+        self.assertEqual(self.client.get(reverse('apple_start'), params).status_code, 400)
+        self.assertFalse(AppleAuthFlow.objects.exists())
+
+    def test_duplicate_callback_code_does_not_exchange_with_apple(self):
+        query, flow = self.start()
+        with patch('user.apple_browser.exchange_apple_code') as exchange:
+            response = self.client.post(reverse('apple_callback'), {
+                'state': query['state'][0], 'code': ['first-code', 'second-code'],
+            })
+        self.assertEqual(response.status_code, 302)
+        exchange.assert_not_called()
+        flow.refresh_from_db()
+        self.assertEqual(flow.status, 'failed')
+
     def callback(self, state, **params):
         return self.client.post(reverse('apple_callback'), {'state': state, **params})
 
@@ -169,6 +188,7 @@ class AppleTokenValidationTests(TestCase):
         with patch('user.apple_sessions.create_client_secret', return_value='secret'), \
              patch('user.apple_sessions.requests.post') as post, \
              patch('user.apple_sessions.apple_keys.get_signing_key_from_jwt', return_value=SimpleNamespace(key=self.key.public_key())):
+            post.return_value.status_code = 200
             post.return_value.json.return_value = {'id_token': token, 'refresh_token': 'apple-refresh', 'access_token': 'apple-access'}
             return exchange_apple_code('authorization-code', 'expected-nonce')[0]
 
@@ -188,6 +208,7 @@ class AppleTokenValidationTests(TestCase):
         with patch('user.apple_sessions.create_client_secret', return_value='secret'), \
              patch('user.apple_sessions.requests.post') as post, \
              patch('user.apple_sessions.apple_keys.get_signing_key_from_jwt', return_value=SimpleNamespace(key=other_key.public_key())):
+            post.return_value.status_code = 200
             post.return_value.json.return_value = {'id_token': self.token(), 'refresh_token': 'apple-refresh', 'access_token': 'apple-access'}
             with self.assertRaises(AppleAuthenticationError):
                 exchange_apple_code('authorization-code', 'expected-nonce')

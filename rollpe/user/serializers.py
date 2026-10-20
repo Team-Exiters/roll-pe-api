@@ -1,7 +1,6 @@
 from rest_framework import serializers
 from .models import User
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from django.contrib.auth import authenticate
 from utils.response import Response
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -22,7 +21,6 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             )
 
         # 비밀번호 확인
-        # user = authenticate(email=email, password=password)
         if not user_instance.check_password(password):
             return Response(
                 msg="비밀번호가 틀렸습니다.",
@@ -51,34 +49,16 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
 class UserSerializer(serializers.ModelSerializer):
 
-    is_test = serializers.BooleanField(required=False, write_only=True) # 테스트 환경을위한 필드
-
     class Meta:
         model = User
-        fields = '__all__'
+        fields = ('name', 'email', 'password', 'birth', 'sex', 'phoneNumber')
         extra_kwargs = {
             'email': {'required': True, 'allow_blank': False, 'allow_null': False},
-            'is_test': {'write_only': True}  # 클라이언트로부터 읽지 못하도록 설정
+            'password': {'write_only': True},
         }
 
     def create(self, validated_data):
-
-        password = validated_data.pop('password')
-        is_test = validated_data.pop('is_test', False)
-
-        user = User.objects.create(**validated_data)
-        # user = User.objects.create_user(password=password, **validated_data)
-        user.set_password(password)
-
-        if is_test:  # 테스트 환경인 경우
-            user.is_active = True
-        else:  # 실제 API 호출인 경우
-            user.is_active = False
-
-        user.save()
-        
-        return user
-
+        return User.objects.create_user(**validated_data, is_active=False)
 
 
 class UserViewSerializer(serializers.ModelSerializer):

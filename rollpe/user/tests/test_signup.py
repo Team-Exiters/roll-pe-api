@@ -158,3 +158,45 @@ class EmailVerificationTest(APITestCase):
         self.assertIn("이미 인증된 링크입니다.", html)
 
 
+
+    def test_signup_cannot_assign_privileges_provider_or_skip_verification(self):
+        response = self.client.post(self.signup_url, {
+            **self.user_data, 'is_staff': True, 'is_superuser': True,
+            'is_active': True, 'is_test': True, 'provider': 'apple',
+            'identifyCode': 'forged', 'groups': [], 'user_permissions': [],
+        }, format='json')
+        self.assertEqual(response.status_code, 201)
+        user = User.objects.get(email=self.user_data['email'])
+        self.assertFalse(user.is_active)
+        self.assertFalse(user.is_staff)
+        self.assertFalse(user.is_superuser)
+        self.assertIsNone(user.provider)
+        self.assertIsNone(user.identifyCode)
+
+    def test_signup_mail_failure_rolls_back_new_user_and_allows_retry(self):
+        from smtplib import SMTPException
+        from unittest.mock import patch
+        with patch('utils.functions.EmailMultiAlternatives.send', side_effect=SMTPException('private server detail')):
+            response = self.client.post(self.signup_url, self.user_data, format='json')
+        self.assertEqual(response.status_code, 503)
+        self.assertNotIn('private server detail', response.content.decode())
+        self.assertFalse(User.objects.filter(email=self.user_data['email']).exists())
+        response = self.client.post(self.signup_url, self.user_data, format='json')
+        self.assertEqual(response.status_code, 201)
+
+    def test_account_endpoints_reject_non_object_json(self):
+        import json
+        user = User.objects.create_user(email='existing@example.com', name='Existing')
+        self.client.force_authenticate(user)
+        routes = (
+            ('post', 'signup'), ('post', 'logout'), ('delete', 'drop_user'),
+            ('post', 'forgot_password'), ('patch', 'forgot_password'),
+            ('patch', 'verify_email'), ('post', 'password_check'), ('patch', 'change_password'),
+        )
+        for method, route in routes:
+            for payload in ([], 'text', 123):
+                with self.subTest(method=method, route=route, payload=payload):
+                    response = getattr(self.client, method)(reverse(route), json.dumps(payload),
+                                                           content_type='application/json')
+                    self.assertEqual(response.status_code, 400)
+        self.assertEqual(User.objects.count(), 1)

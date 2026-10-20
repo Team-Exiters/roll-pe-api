@@ -1,4 +1,3 @@
-from django.core.handlers.asgi import ASGIRequest
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 from rest_framework_simplejwt.settings import api_settings
@@ -12,11 +11,11 @@ from rest_framework.views import APIView
 from rest_framework import permissions
 
 from django.db.models import Q
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
-from django.shortcuts import redirect, get_object_or_404
-from django.conf import settings
+from django.shortcuts import get_object_or_404
 from django.contrib.auth.hashers import check_password
+from django.contrib.auth.tokens import default_token_generator
 
 from utils.response import Response
 from utils.functions import verify_email_token, generate_send_email, create_idenfy_number, PRIVACY, TERMS
@@ -27,6 +26,12 @@ from user.apple_sessions import credential_for_token, revoke_apple_credentials
 from user.authentication import RollpeTokenRefreshSerializer
 
 from paper.models import Paper
+
+def invalid_object_body(request):
+    if not hasattr(request.data, 'get'):
+        return Response(msg='올바르지 않은 요청입니다.', status=400)
+    return None
+
 
 class RollpeTokenRefreshView(TokenRefreshView):
     serializer_class = RollpeTokenRefreshSerializer
@@ -51,6 +56,9 @@ class CustomTokenObtainPairAPI(TokenObtainPairView):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def logout_api(request):
+    error = invalid_object_body(request)
+    if error is not None:
+        return error
     refresh_token = request.data.get("refresh")
 
     if not refresh_token:
@@ -69,7 +77,7 @@ def logout_api(request):
                 credential.invalidated_at = timezone.now()
                 credential.save(update_fields=['invalidated_at'])
             token.blacklist()
-    except TokenError as e:
+    except (TokenError, TypeError, ValueError):
         return Response(msg="유효한 Refresh Token이 아닙니다. ", status=403)
 
     return Response(msg="로그아웃 되었습니다.", status=200)
@@ -78,6 +86,9 @@ def logout_api(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def signup_api(request):
+    error = invalid_object_body(request)
+    if error is not None:
+        return error
     # 회원가입 데이터 처리
     email = request.data.get("email")
 
@@ -85,25 +96,25 @@ def signup_api(request):
         return Response(msg="이미 가입된 이메일입니다.", status=400)
 
     serializer = UserSerializer(data=request.data)
-    if serializer.is_valid():
-        try:
-            user = serializer.create(serializer.validated_data)
-            # serializer = UserSerializer(user)
-
-            generate_send_email(request, user.email, path_code="email")
-
-            return Response(msg="회원가입이 완료되었습니다. 이메일을 확인해주세요.", status=201)
-        
-        except Exception as e:
-            
-            return Response(msg=serializer.errors, status=400)
-
-    else:
+    if not serializer.is_valid():
         return Response(msg=serializer.errors, status=400)
+    try:
+        with transaction.atomic():
+            user = serializer.save()
+            result = generate_send_email(request, user.email, path_code="email")
+            if result.status_code != 200:
+                transaction.set_rollback(True)
+                return result
+    except IntegrityError:
+        return Response(msg="이미 가입된 이메일입니다.", status=400)
+    return Response(msg="회원가입이 완료되었습니다. 이메일을 확인해주세요.", status=201)
 
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
 def drop_user_data(request):
+    error = invalid_object_body(request)
+    if error is not None:
+        return error
 
     identify_code = request.data.get("identifyCode")
     refresh_token = request.data.get("refresh")
@@ -121,7 +132,7 @@ def drop_user_data(request):
         token = RefreshToken(refresh_token)
         if str(token.get(api_settings.USER_ID_CLAIM)) != str(request.user.pk):
             return Response(msg='다른 사용자의 Refresh Token입니다.', status=403)
-    except TokenError as e:
+    except (TokenError, TypeError, ValueError):
         return Response(msg="유효한 Refresh Token이 아닙니다. ", status=403)
 
     with transaction.atomic():
@@ -186,10 +197,20 @@ class VerifyEmailAPI(APIView):
             return djangoResponse({"msg": str(e)})
     
     def patch(self, request):
-        email = request.data["email"]
-
-        path_code = request.data["pathCode"]
-        generate_send_email(request, email, path_code=path_code)
+        error = invalid_object_body(request)
+        if error is not None:
+            return error
+        email = request.data.get("email")
+        path_code = request.data.get("pathCode")
+        if not isinstance(email, str) or not email or path_code not in ('email', 'password'):
+            return Response(msg='이메일과 인증 경로를 확인해주세요.', status=400)
+        if path_code == 'password':
+            user = User.objects.filter(email=email, is_active=True, provider__isnull=True).first()
+            if user is None:
+                return Response(msg='비밀번호를 변경할 수 없는 계정입니다.', status=400)
+        result = generate_send_email(request, email, path_code=path_code)
+        if result.status_code != 200:
+            return result
         return Response(msg="인증 이메일을 재 전송하였습니다.", status=200)
 
 class ForgotPasswordAPI(APIView):
@@ -197,30 +218,48 @@ class ForgotPasswordAPI(APIView):
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
-        email = request.data['email']
+        error = invalid_object_body(request)
+        if error is not None:
+            return error
+        email = request.data.get('email')
+        if not isinstance(email, str) or not email:
+            return Response(msg='이메일이 필요합니다.', status=400)
 
         user_query = User.objects.filter(email=email)
 
         if not user_query.exists():
             return Response(msg="회원가입되지 않은 이메일입니다.", status=400)
         
+        if not user_query.filter(is_active=True).exists():
+            return Response(msg='이메일 인증을 진행해주세요.', status=400)
         provider = user_query.values_list('provider',flat=True).first()
         if provider is not None:
             return Response(msg=f"{provider}로 회원가입된 이메일입니다. {provider}에서 비밀번호 찾기를 진행해주세요.", status=400)
         
-        generate_send_email(request, email, path_code="password")
+        result = generate_send_email(request, email, path_code="password")
+        if result.status_code != 200:
+            return result
         return Response(msg="비밀번호 변경 이메일이 전송되었습니다.", status=200)
 
     def patch(self, request):
+        error = invalid_object_body(request)
+        if error is not None:
+            return error
 
-        identify_code = request.data['identifyCode']
-        new_password = request.data['newPassword']
-
-        user = User.objects.get(identifyCode=identify_code)
-        
-        user.set_password(new_password)
-        user.save()
-
+        identify_code = request.data.get('identifyCode')
+        token = request.data.get('token')
+        new_password = request.data.get('newPassword')
+        if not all(isinstance(value, str) and value for value in (identify_code, token, new_password)):
+            return Response(msg='유효한 비밀번호 변경 링크와 새 비밀번호가 필요합니다.', status=400)
+        with transaction.atomic():
+            user = User.objects.select_for_update().filter(identifyCode=identify_code).first()
+            if (user is None or not user.is_active or user.provider
+                    or not default_token_generator.check_token(user, token)):
+                return Response(msg='유효하지 않거나 만료된 비밀번호 변경 링크입니다.', status=400)
+            user.set_password(new_password)
+            user.save(update_fields=['password'])
+            for outstanding in OutstandingToken.objects.filter(user=user):
+                BlacklistedToken.objects.get_or_create(token=outstanding)
         return Response(msg="비밀번호 변경이 완료되었습니다. 다시 로그인해주세요.", status=200)
 
 @api_view(['GET'])
@@ -277,6 +316,9 @@ def search_user_name(request):
 
     user_name_code = request.GET.get("nameCode")
 
+    if not user_name_code:
+        return Response(msg="검색어가 필요합니다.", status=400)
+
     users = User.objects.filter(Q(name__icontains=user_name_code) | Q(provider__icontains=user_name_code))
     if not users:
         return Response(msg="사용자를 찾을 수 없습니다.",status=404)
@@ -290,64 +332,58 @@ def search_user_name(request):
 
 @api_view(['POST'])
 def user_password_check(request):
+    error = invalid_object_body(request)
+    if error is not None:
+        return error
     password = request.data.get("password", None)
     user = request.user
  
     if user.is_anonymous:
         return Response(status=401)
     
-    if password is None:
+    if not isinstance(password, str) or not password:
         return Response(status=400, msg="패스워드가 없습니다.")
  
  
     return Response(status=200, data={"status": user.check_password(password)})
 
 @api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
 def change_user_password(request):
-
-    refresh_token = request.data.get("refresh")
-
-    # password = request.data['password']
-    new_password = request.data['newPassword']
-    
-    # 현재 비밀번호 확인
-    # if not check_password(password, request.user.password):
-    #     return Response(msg="현재 비밀번호가 틀렸습니다.", status=400)
-    
-    # 현재와 변경된 비밀변호가 같음
-    if check_password(new_password, request.user.password):
-        return Response(msg="현재 비밀번호와 새로운 비밀번호가 같습니다.", status=400)
-
-    request.user.set_password(new_password)
-    request.user.save()
-    
-    # 리프레시 토큰 무효화 처리 (로그아웃)
-    if refresh_token:
-        try:
-            token = RefreshToken(refresh_token)
-            token.blacklist()  
-        except Exception as e:
-            return Response(msg="토큰 무효화 중 오류가 발생했습니다.", status=400)
-    else:
+    error = invalid_object_body(request)
+    if error is not None:
+        return error
+    refresh_token = request.data.get('refresh')
+    new_password = request.data.get('newPassword')
+    if not isinstance(new_password, str) or not new_password:
+        return Response(msg="새로운 비밀번호가 필요합니다.", status=400)
+    if not refresh_token:
         return Response(msg="토큰이 존재하지 않습니다.", status=400)
+    try:
+        token = RefreshToken(refresh_token)
+        if str(token.get(api_settings.USER_ID_CLAIM)) != str(request.user.pk):
+            return Response(msg='다른 사용자의 Refresh Token입니다.', status=403)
+    except (TokenError, TypeError, ValueError):
+        return Response(msg="토큰 무효화 중 오류가 발생했습니다.", status=400)
 
+    with transaction.atomic():
+        user = User.objects.select_for_update().get(pk=request.user.pk)
+        credential = credential_for_token(user, token)
+        if check_password(new_password, user.password):
+            return Response(msg="현재 비밀번호와 새로운 비밀번호가 같습니다.", status=400)
+        token.blacklist()
+        if credential:
+            credential.invalidated_at = timezone.now()
+            credential.save(update_fields=['invalidated_at'])
+        user.set_password(new_password)
+        user.save(update_fields=['password'])
     return Response(msg="비밀번호 변경이 완료되었습니다. 다시 로그인해주세요.", status=200)
-
-# rollpe2025!
-# testpassword!
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def get_docs_api(request):
-    query_string = request.GET.get("docs")
-    try:
-        match query_string:
-            case "privacy":
-                data = PRIVACY
-            case "terms":
-                data = TERMS
-    except:
-        return Response(msg="잘못된 입력값입니다.", status=400)    
-        
-    
+    documents = {'privacy': PRIVACY, 'terms': TERMS}
+    data = documents.get(request.GET.get('docs'))
+    if data is None:
+        return Response(msg="잘못된 입력값입니다.", status=400)
     return Response(data=data, status=200)

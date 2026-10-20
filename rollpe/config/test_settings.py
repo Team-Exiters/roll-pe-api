@@ -59,3 +59,6 @@ KAKAO_AUTH_APP_ID = '5678'
 KAKAO_AUTH_CLIENT_SECRET = 'test-kakao-secret'
 KAKAO_AUTH_REDIRECT_URI = 'https://rollpe.mooo.com/api/user/social/login/kakao/callback'
 KAKAO_AUTH_RETURN_URLS = ['http://localhost:8081/auth/kakao', 'reactnativerollpe://auth/kakao']
+
+# Password reset links expire after 30 minutes.
+PASSWORD_RESET_TIMEOUT = 1800

@@ -91,10 +91,19 @@ class PaperCreateSerializer(serializers.ModelSerializer):
 		read_only_fields = ("id", "createdAt", "updatedAt", "code")
 
 		extra_kwargs = {
-      'password': {'required': False, 'allow_null': True, 'write_only': True}
+      'password': {'required': False, 'allow_null': True, 'write_only': True},
+      'hostFK': {'required': False}
     }
 
+	def validate_hostFK(self, host):
+		request = self.context.get('request')
+		if request is not None and host.pk != request.user.pk:
+			raise serializers.ValidationError("본인만 호스트로 지정할 수 있습니다.")
+		return host
+
 	def validate_receiverTel(self, receiverTel):
+		if receiverTel is None:
+			return receiverTel
 		if not receiverTel.isdigit():
 			raise serializers.ValidationError("receiverTel 영역의 값은 int로 이루어져야 합니다.")
 
@@ -113,54 +122,6 @@ class PaperCreateSerializer(serializers.ModelSerializer):
 				"수신자 정보를 위해 receiverFK 또는 receiverName, receiverTel 중 최소 하나는 반드시 전달되어야 합니다."
 				)
 		return attrs
-
-
-class PaperSerializer(serializers.ModelSerializer):
-	host = serializers.SerializerMethodField()
-	receiver = serializers.SerializerMethodField()
-
-	theme = serializers.SerializerMethodField()
-	size = serializers.SerializerMethodField()
-	ratio = serializers.SerializerMethodField()
-	invitingUser = serializers.SerializerMethodField()
-
-	class Meta:
-		model = Paper
-		fields = (
-			'host', 'receiver',
-			'theme', 'size', 'ratio',
-			'viewStat', 'title', 'description', 'invitingUser', 'createdAt'
-		)
-
-	def get_host(self, paper):
-		return UserViewSerializer(paper.hostFK).data
-
-	def get_receiver(self, paper):
-		response = dict()
-
-		response["id"] = UserViewSerializer(paper.receiverFK).data if paper.receiverFK else None
-		response["name"] = paper.receiverFK.name if paper.receiverFK else paper.receiverName
-		response["tel"] = "" if paper.receiverTel else paper.receiverTel
-		response["date"] = paper.receivingDate
-		response["stat"] = paper.receivingStat
-		response["is_user"] = True if paper.receiverFK else False
-
-		return response
-
-	def get_theme(self, paper):
-		return QueryIndexSerializer(paper.themeFK).data
-
-	def get_size(self, paper):
-		return QueryIndexSerializer(paper.sizeFK).data
-
-	def get_ratio(self, paper):
-		return QueryIndexSerializer(paper.ratioFK).data
-
-	def get_invitingUser(self, paper):
-		if not paper.invitingUser:
-			return []
-		return UserViewSerializer(paper.invitingUser.all(), many=True).data
-
 
 
 class QueryIndexSerializer(serializers.ModelSerializer):

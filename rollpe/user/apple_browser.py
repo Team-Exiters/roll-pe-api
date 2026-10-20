@@ -1,7 +1,5 @@
 """Apple browser authorization, callback, and one-time PKCE exchange."""
 
-import base64
-import hashlib
 import json
 import logging
 import re
@@ -20,23 +18,10 @@ from .apple_sessions import (
     APPLE_ISSUER, AppleAuthenticationError, AppleUnavailable, apple_user,
     exchange_apple_code, save_credential, token_cipher,
 )
+from .oauth_utils import digest, no_store, pkce_challenge
 from .models import AppleAuthFlow, AppleCredential, User
 
 logger = logging.getLogger(__name__)
-
-
-def digest(value):
-    return hashlib.sha256(value.encode()).hexdigest()
-
-
-def pkce_challenge(verifier):
-    return base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b'=').decode()
-
-
-def no_store(response):
-    response['Cache-Control'] = 'no-store'
-    response['Referrer-Policy'] = 'no-referrer'
-    return response
 
 
 def client_redirect(flow, **params):
@@ -52,7 +37,8 @@ def apple_start(request):
     challenge = request.GET.get('code_challenge', '')
     client_state = request.GET.get('state', '')
     if (
-        return_url not in settings.APPLE_AUTH_RETURN_URLS
+        any(len(request.GET.getlist(key)) != 1 for key in ('return_url', 'code_challenge', 'state'))
+        or return_url not in settings.APPLE_AUTH_RETURN_URLS
         or not re.fullmatch(r'[A-Za-z0-9_-]{43}', challenge)
         or not re.fullmatch(r'[A-Za-z0-9_-]{32,64}', client_state)
     ):
@@ -91,7 +77,7 @@ def apple_start(request):
 @require_POST
 def apple_callback(request):
     state = request.POST.get('state', '')
-    if not state or len(state) > 128:
+    if len(request.POST.getlist('state')) != 1 or not re.fullmatch(r'[A-Za-z0-9_-]{43}', state):
         return no_store(Response(status=400, msg='인증 요청을 확인할 수 없습니다.'))
     flow = AppleAuthFlow.objects.filter(state_hash=digest(state)).first()
     if not flow:
@@ -108,7 +94,7 @@ def apple_callback(request):
         error = 'cancelled' if request.POST['error'] == 'user_cancelled_authorize' else 'authentication_failed'
         return client_redirect(flow, error=error)
     code = request.POST.get('code', '')
-    if not code or len(code) > 2048:
+    if len(request.POST.getlist('code')) != 1 or not code or len(code) > 2048:
         flow.status = 'failed'
         flow.save(update_fields=['status'])
         return client_redirect(flow, error='authentication_failed')

@@ -94,65 +94,74 @@ class PaperEnterManageAPITest(APITestCase):
 		self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
 
 	def test_enter_manage_with_invalid_password(self):
-		paper = baker.make(Paper, hostFK=self.user)
+		paper = baker.make(Paper, hostFK=self.user, password='correctpassword', viewStat=False)
 		url = reverse('paper_invite_api')
 		response = self.client.post(url, {'pcode': str(paper.code), 'password': 'wrongpassword'}, format='json')
-
-		# 응답이 JSON 형식인지 확인
-		try:
-			response_data = json.loads(response.content)
-			# 비밀번호 불일치 상태 코드는 472로 확인
-			self.assertEqual(response.status_code, 472)
-			self.assertEqual(response_data['message'], "롤페의 비밀번호가 틀립니다.")
-
-		except json.JSONDecodeError:
-			# JSON 디코딩 오류 발생 시 처리
-			print("Response content is not valid JSON:", response.content)
+		self.assertEqual(response.status_code, 472)
+		self.assertFalse(paper.invitingUser.filter(pk=self.user.pk).exists())
 
 
-# class PaperPasswordAPITest(APITestCase):
-# 	def setUp(self):
-# 		self.user = baker.make(get_user_model())
-# 		self.client.force_authenticate(user=self.user)
-#
-# 	def test_change_password_success(self):
-# 		paper = baker.make(Paper, hostFK=self.user, password='oldpassword')
-#
-# 		url = reverse('paper_api') + '/password/'
-#
-# 		data = {
-# 			"pcode": str(paper.code),
-# 			"original_password": "oldpassword",
-# 			"change_password": "newpassword"
-# 			}
-#
-# 		response = self.client.put(url, data=data)
-#
-# 		# 비밀번호 변경 성공 시 상태 코드 확인
-# 		self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
-#
-# 	def test_change_password_fail_due_to_wrong_original(self):
-# 		paper = baker.make(Paper, hostFK=self.user)
-#
-# 		url = reverse('paper_api') + '/password/'
-#
-# 		data = {
-# 			"pcode": str(paper.code),
-# 			"original_password": "wrongpassword",
-# 			"change_password": "newpassword"
-# 			}
-#
-# 		response = self.client.put(url, data=data)
-#
-# 		# 응답이 JSON 형식인지 확인
-# 		try:
-# 			response_data = json.loads(response.content)
-# 			# 비밀번호 불일치 상태 코드는 472로 확인
-# 			self.assertEqual(response.status_code, 472)
-# 			# 메시지 확인 (예시 메시지 사용; 실제 메시지에 맞게 수정 필요)
-# 			self.assertEqual(response_data['message'], "기존 비밀번호와 다릅니다.")
-#
-# 		except json.JSONDecodeError:
-# 			# JSON 디코딩 오류 발생 시 처리
-# 			print("Response content is not valid JSON:", response.content)
+class PaperAuthorizationTests(APITestCase):
+    def setUp(self):
+        self.host = baker.make(get_user_model())
+        self.other = baker.make(get_user_model())
+        self.paper = baker.make(Paper, hostFK=self.host)
+        self.payload = {
+            'themeFK': self.paper.themeFK_id, 'sizeFK': self.paper.sizeFK_id,
+            'ratioFK': self.paper.ratioFK_id, 'receiverFK': self.other.pk,
+            'title': 'Authenticated creation', 'receivingDate': '2026-10-20',
+        }
 
+    def test_create_requires_authentication_on_both_routes(self):
+        for route in ('paper_api', 'paper_api_for_user'):
+            self.assertEqual(self.client.post(reverse(route), self.payload).status_code, 401)
+        self.assertEqual(Paper.objects.count(), 1)
+
+    def test_both_routes_reject_host_spoof_and_derive_current_host(self):
+        self.client.force_authenticate(self.host)
+        for route in ('paper_api', 'paper_api_for_user'):
+            self.assertEqual(self.client.post(reverse(route), {**self.payload, 'hostFK': self.other.pk}).status_code, 400)
+            self.assertEqual(self.client.post(reverse(route), self.payload).status_code, 201)
+        self.assertEqual(Paper.objects.count(), 3)
+        self.assertFalse(Paper.objects.exclude(hostFK=self.host).exists())
+
+    def test_optional_null_phone_is_valid_with_registered_receiver(self):
+        self.client.force_authenticate(self.host)
+        response = self.client.post(reverse('paper_api'), {**self.payload, 'receiverTel': None}, format='json')
+        self.assertEqual(response.status_code, 201)
+
+    def test_delete_handles_anonymous_missing_invalid_and_unknown_codes(self):
+        route = reverse('paper_api_for_user')
+        self.assertEqual(self.client.delete(route, {'pcode': str(self.paper.code)}).status_code, 401)
+        self.client.force_authenticate(self.host)
+        for payload in ({}, {'pcode': 'bad-uuid'}, {'pcode': ['bad']}):
+            self.assertEqual(self.client.delete(route, payload, format='json').status_code, 400)
+        self.assertEqual(self.client.delete(route, {'pcode': '00000000-0000-0000-0000-000000000000'}).status_code, 404)
+        self.assertTrue(Paper.objects.filter(pk=self.paper.pk).exists())
+
+    def test_only_host_can_delete_and_legacy_denials_remain(self):
+        self.client.force_authenticate(self.other)
+        route = reverse('paper_api_for_user')
+        self.assertEqual(self.client.delete(route, {'pcode': str(self.paper.code)}).status_code, 471)
+        self.paper.invitingUser.add(self.other)
+        self.assertEqual(self.client.delete(route, {'pcode': str(self.paper.code)}).status_code, 470)
+        self.assertTrue(Paper.objects.filter(pk=self.paper.pk).exists())
+
+    def test_malformed_detail_and_entry_codes_return_client_error(self):
+        self.client.force_authenticate(self.host)
+        self.assertEqual(self.client.get(reverse('paper_api'), {'pcode': 'bad'}).status_code, 400)
+        self.assertEqual(self.client.post(reverse('paper_invite_api'), {'pcode': 'bad'}).status_code, 400)
+
+
+class QueryIndexAuthorizationTests(APITestCase):
+    def test_catalog_get_is_public_and_post_requires_staff(self):
+        route = reverse('query_index')
+        payload = {'name': 'Test theme', 'type': 'THEME', 'query': {}}
+        self.assertEqual(self.client.get(route).status_code, 200)
+        self.assertEqual(self.client.post(route, payload, format='json').status_code, 401)
+        self.client.force_authenticate(baker.make(get_user_model(), is_staff=False))
+        self.assertEqual(self.client.post(route, payload, format='json').status_code, 403)
+        self.assertFalse(QueryIndexTable.objects.exists())
+        self.client.force_authenticate(baker.make(get_user_model(), is_staff=True))
+        self.assertEqual(self.client.post(route, payload, format='json').status_code, 201)
+        self.assertEqual(QueryIndexTable.objects.count(), 1)

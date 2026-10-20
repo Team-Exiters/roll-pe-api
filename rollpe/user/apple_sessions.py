@@ -60,6 +60,9 @@ def encrypted_tokens(tokens):
 def create_client_secret(client_id=None):
     now = timezone.now()
     try:
+        if not all((settings.APPLE_AUTH_TEAM_ID, settings.APPLE_AUTH_KEY_ID,
+                    settings.APPLE_AUTH_PRIVATE_KEY_FILE, client_id or settings.APPLE_AUTH_CLIENT_ID)):
+            raise ValueError()
         private_key = Path(settings.APPLE_AUTH_PRIVATE_KEY_FILE).read_text()
         return jwt.encode(
             {'iss': settings.APPLE_AUTH_TEAM_ID, 'iat': int(now.timestamp()),
@@ -85,7 +88,8 @@ def verify_identity_token(token, client_id, nonce=None):
         raise AppleAuthenticationError('유효하지 않은 애플 인증 정보입니다.') from None
     if not isinstance(claims['sub'], str) or not claims['sub'] or len(claims['sub']) > 255:
         raise AppleAuthenticationError('애플 사용자 식별자를 확인할 수 없습니다.')
-    if nonce is not None and not secrets.compare_digest(str(claims['nonce']), nonce):
+    if nonce is not None and (not isinstance(nonce, str) or not isinstance(claims['nonce'], str)
+                              or not secrets.compare_digest(claims['nonce'].encode(), nonce.encode())):
         raise AppleAuthenticationError('애플 로그인 요청이 일치하지 않습니다.')
     return claims
 
@@ -97,8 +101,10 @@ def exchange_apple_code(code, nonce, client_id=None, redirect_uri=None):
     if redirect_uri is not None:
         data['redirect_uri'] = redirect_uri
     try:
-        response = requests.post(f'{APPLE_ISSUER}/auth/token', data=data, timeout=10)
+        response = requests.post(f'{APPLE_ISSUER}/auth/token', data=data, timeout=10, allow_redirects=False)
         response.raise_for_status()
+        if response.status_code != 200:
+            raise ValueError()
         tokens = response.json()
         if not isinstance(tokens, dict):
             raise ValueError()
@@ -193,7 +199,7 @@ def validate_apple_session(credential):
                     'grant_type': 'refresh_token', 'refresh_token': refresh,
                     'client_id': credential.client_id,
                     'client_secret': create_client_secret(credential.client_id),
-                }, timeout=10)
+                }, timeout=10, allow_redirects=False)
                 payload = response.json()
                 if not isinstance(payload, dict):
                     raise ValueError()
@@ -204,6 +210,8 @@ def validate_apple_session(credential):
                     failure = AuthenticationFailed('애플 계정 연결이 해제되었습니다. 다시 로그인해주세요.')
                 else:
                     response.raise_for_status()
+                    if response.status_code != 200:
+                        raise ValueError()
                     if not payload.get('access_token'):
                         raise ValueError()
                     if payload.get('id_token'):
@@ -241,8 +249,10 @@ def revoke_apple_credentials(user):
             response = requests.post(f'{APPLE_ISSUER}/auth/revoke', data={
                 'client_id': credential.client_id, 'client_secret': create_client_secret(credential.client_id),
                 'token': token, 'token_type_hint': 'refresh_token',
-            }, timeout=10)
+            }, timeout=10, allow_redirects=False)
             response.raise_for_status()
+            if response.status_code != 200:
+                raise requests.RequestException()
         except requests.RequestException:
             raise AppleUnavailable('애플 연결을 해제하지 못했습니다. 잠시 후 다시 시도해주세요.') from None
         credential.apple_revoked_at = timezone.now()
