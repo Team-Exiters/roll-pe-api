@@ -238,6 +238,7 @@ GOOGLE_AUTH_RETURN_URLS = [
 ]
 KAKAO_AUTH_CLIENT_ID = os.environ.get('KAKAO_AUTH_CLIENT_ID', os.environ.get('SOCIAL_AUTH_KAKAO_CLIENT_ID', ''))
 KAKAO_AUTH_CLIENT_SECRET = os.environ.get('KAKAO_AUTH_CLIENT_SECRET', '')
+KAKAO_AUTH_APP_ID = os.environ.get('KAKAO_AUTH_APP_ID', '')
 KAKAO_AUTH_REDIRECT_URI = os.environ.get(
     'KAKAO_AUTH_REDIRECT_URI', 'https://rollpe.mooo.com/api/user/social/login/kakao/callback',
 )

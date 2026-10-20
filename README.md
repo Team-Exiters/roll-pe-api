@@ -24,6 +24,7 @@ GOOGLE_AUTH_REDIRECT_URI=https://rollpe.mooo.com/api/user/social/login/google/ca
 GOOGLE_AUTH_RETURN_URLS=http://localhost:8081/auth/google
 
 KAKAO_AUTH_CLIENT_ID=카카오_REST_API_키
+KAKAO_AUTH_APP_ID=카카오_숫자_앱_ID
 KAKAO_AUTH_CLIENT_SECRET=카카오_Client_Secret
 KAKAO_AUTH_REDIRECT_URI=https://rollpe.mooo.com/api/user/social/login/kakao/callback
 KAKAO_AUTH_RETURN_URLS=http://localhost:8081/auth/kakao
@@ -33,6 +34,9 @@ KAKAO_AUTH_RETURN_URLS=http://localhost:8081/auth/kakao
 - 카카오는 해당 REST API 키의 클라이언트 시크릿 기능이 ON이면 `KAKAO_AUTH_CLIENT_SECRET`에 해당 값을 설정합니다. OFF이면 이 환경변수를 생략하거나 비워둘 수 있으며 토큰 요청에서도 `client_secret`을 생략합니다. 새 REST API 키는 시크릿 기능이 기본 활성화되고, 공식 문서에서도 사용을 권장합니다. 서버가 콘솔 설정을 바꾸지는 않습니다.
 - 카카오의 최초 계정 연결에 사용할 이메일 동의항목을 설정합니다. 네이티브 앱 키와 REST API 키를 구분합니다.
 - 기존 서버 환경변수를 재사용할 수 있도록 Google 웹 ID는 `WEB_GOOGLE_OAUTH_CLIENT_KEY`, 시크릿은 기존 이름인 `GOOGLE_OAUTH_CLIENT_ID`, 카카오 REST API 키는 `SOCIAL_AUTH_KAKAO_CLIENT_ID`를 대체값으로 읽습니다. 위의 새 이름을 설정하면 새 값이 우선합니다. 기존 Google iOS ID 설정은 바꾸지 않습니다.
+- Android 네이티브 Google 로그인은 웹 Client ID를 대상으로 발급된 ID 토큰을 기존 `POST /api/user/social/login/google`에 보냅니다. 서버는 기존 `IOS_GOOGLE_OAUTH_CLIENT_KEY`와 `GOOGLE_AUTH_CLIENT_ID`를 허용 대상으로 검증합니다. Android OAuth Client ID는 앱 패키지·서명 등록용이며 이 ID를 웹 ID 대신 설정하지 않습니다. 네이티브 ID 토큰 검증 자체에는 웹 시크릿이 필요하지 않고, 위 웹 브라우저의 인가 코드 교환에는 필요합니다.
+- 네이티브 Google·카카오도 `SocialIdentity`로 웹과 같은 계정을 조회합니다. 기존 같은 공급자의 회원은 검증된 이메일로 최초 연결하고, 이후 공급자의 사용자 ID로 조회합니다. 다른 로그인 방식의 회원과 비활성 회원은 연결하지 않습니다. 기존 iOS 요청 필드(`accessToken`)와 응답 형식은 유지하며 `0006` 이후 새 마이그레이션은 없습니다.
+- 네이티브 카카오는 `/v1/user/access_token_info`로 발급 앱 ID·만료 여부·회원번호를 확인한 뒤 사용자 정보를 조회합니다. `KAKAO_AUTH_APP_ID`는 카카오 디벨로퍼스에 표시되는 숫자 앱 ID이며 REST API 키나 네이티브 앱 키가 아닙니다. 이 값이 없으면 네이티브 카카오 로그인은 503으로 거절하므로 기존 iOS 앱을 포함해 서버 배포 전에 설정합니다. 웹은 서버가 직접 인가 코드를 교환하므로 이 추가 설정과 독립적입니다.
 - `*_AUTH_RETURN_URLS`는 인증 후 돌아갈 **클라이언트 주소** 허용 목록입니다. 쉼표로 구분하며 실제 웹 배포 후 해당 도메인의 `/auth/google`, `/auth/kakao`를 각각 추가합니다. 쿼리 문자열·fragment가 없는 정확한 복귀 주소를 사용합니다. 등록된 HTTP(S) origin만 해당 API의 CORS 허용 목록에도 추가됩니다.
 - 향후 Android 브라우저 로그인을 연결하면 각각 `reactnativerollpe://auth/google`, `reactnativerollpe://auth/kakao`를 해당 허용 목록에 추가합니다. 개발자 콘솔의 서버 콜백 주소는 그대로 유지합니다.
 - 인증 요청과 클라이언트 교환 모두 S256 PKCE로 연결하고, 서버 state는 한 번만 처리합니다. Google은 `openid email profile`만 요청하고 서명·issuer·audience·만료·nonce를 검증합니다. 카카오는 서버가 받은 액세스 토큰으로 사용자 ID와 이메일 인증 여부를 확인합니다.

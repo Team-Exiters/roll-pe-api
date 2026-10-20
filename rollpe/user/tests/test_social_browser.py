@@ -302,8 +302,15 @@ class SocialBrowserTests(TestCase):
         self.post.side_effect = None
 
     def test_existing_native_social_apis_keep_their_access_token_payload_contract(self):
+        self.get.side_effect = lambda url, **kwargs: (
+            http_response({'app_id': 5678, 'id': 12345, 'expires_in': 3600})
+            if url.endswith('/access_token_info') else http_response(self.kakao)
+        )
         for provider in ('google', 'kakao'):
-            self.google.return_value = {'name': 'Native Google', 'email': 'google@example.com'}
+            self.google.return_value = {
+                'sub': 'native-google', 'name': 'Native Google',
+                'email': 'google@example.com', 'email_verified': True,
+            }
             with patch('user.apis_social.return_env_value', return_value='native-ios-client'):
                 response = self.client.post(f'/api/user/social/login/{provider}',
                                             json.dumps({'accessToken': 'native-token'}), content_type='application/json')

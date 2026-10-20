@@ -147,6 +147,30 @@ def google_profile(token, client_id, nonce):
     }
 
 
+def kakao_profile(access):
+    if not isinstance(access, str) or not access or len(access) > 8192:
+        raise SocialAuthenticationError()
+    try:
+        response = requests.get('https://kapi.kakao.com/v2/user/me',
+                                headers={'Authorization': f'Bearer {access}'}, timeout=10,
+                                allow_redirects=False)
+        response.raise_for_status()
+        profile = response.json()
+        if not isinstance(profile, dict) or response.status_code != 200:
+            raise SocialAuthenticationError()
+        subject = profile.get('id')
+        if type(subject) is not int or subject <= 0 or len(str(subject)) > 255:
+            raise SocialAuthenticationError()
+        account = profile.get('kakao_account') or {}
+        name = (account.get('profile') or {}).get('nickname', '')
+        email = verified_email(account.get('email'), account.get('is_email_verified'))
+        if account.get('is_email_valid') is not True:
+            email = None
+        return {'subject': str(subject), 'email': email, 'name': name}
+    except (requests.RequestException, ValueError, TypeError, AttributeError, KeyError):
+        raise SocialAuthenticationError() from None
+
+
 def exchange_provider_code(provider, code, flow):
     config = provider_settings(provider)
     data = {
@@ -165,25 +189,7 @@ def exchange_provider_code(provider, code, flow):
         if provider == 'google':
             return google_profile(tokens.get('id_token'), config['CLIENT_ID'], flow.nonce)
 
-        access = tokens.get('access_token')
-        if not isinstance(access, str) or not access:
-            raise SocialAuthenticationError()
-        response = requests.get('https://kapi.kakao.com/v2/user/me',
-                                headers={'Authorization': f'Bearer {access}'}, timeout=10,
-                                allow_redirects=False)
-        response.raise_for_status()
-        profile = response.json()
-        if not isinstance(profile, dict) or response.status_code != 200:
-            raise SocialAuthenticationError()
-        subject = profile.get('id')
-        if type(subject) is not int or subject <= 0 or len(str(subject)) > 255:
-            raise SocialAuthenticationError()
-        account = profile.get('kakao_account') or {}
-        name = (account.get('profile') or {}).get('nickname', '')
-        email = verified_email(account.get('email'), account.get('is_email_verified'))
-        if account.get('is_email_valid') is not True:
-            email = None
-        return {'subject': str(subject), 'email': email, 'name': name}
+        return kakao_profile(tokens.get('access_token'))
     except (requests.RequestException, ValueError, TypeError, AttributeError, KeyError):
         raise SocialAuthenticationError() from None
 
