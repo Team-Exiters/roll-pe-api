@@ -15,12 +15,12 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
 from django.contrib.auth.hashers import check_password
-from django.contrib.auth.tokens import default_token_generator
 
 from utils.response import Response
 from utils.functions import verify_email_token, generate_send_email, create_idenfy_number, PRIVACY, TERMS
 
 from user.serializers import UserSerializer, CustomTokenObtainPairSerializer, UserViewSerializer
+from user.password_reset import PasswordResetError, reset_password
 from user.models import User
 from user.apple_sessions import credential_for_token, revoke_apple_credentials
 from user.authentication import RollpeTokenRefreshSerializer
@@ -101,7 +101,7 @@ def signup_api(request):
     try:
         with transaction.atomic():
             user = serializer.save()
-            result = generate_send_email(request, user.email, path_code="email")
+            result = generate_send_email(user.email, path_code="email")
             if result.status_code != 200:
                 transaction.set_rollback(True)
                 return result
@@ -152,8 +152,7 @@ def drop_user_data(request):
     return Response(msg="회원 탈퇴 되었습니다.", status=200)
 
 ### 예정 : 추후 이메일 인증 완료 페이지 redirect ###
-# 회원가입 이메일 인증시 
-# 비밀번호 찾기 이메일 인증시
+# 회원가입 이메일 인증 및 인증 메일 재전송
 class VerifyEmailAPI(APIView):
 
 
@@ -189,11 +188,9 @@ class VerifyEmailAPI(APIView):
                     
                     pass
 
-            # return redirect(redirect_url)
             return djangoResponse({"msg": "이메일 인증이 완료되었습니다."})
         
         except ValueError as e:
-            # return Response(msg=str(e), status=400)
             return djangoResponse({"msg": str(e)})
     
     def patch(self, request):
@@ -208,7 +205,7 @@ class VerifyEmailAPI(APIView):
             user = User.objects.filter(email=email, is_active=True, provider__isnull=True).first()
             if user is None:
                 return Response(msg='비밀번호를 변경할 수 없는 계정입니다.', status=400)
-        result = generate_send_email(request, email, path_code=path_code)
+        result = generate_send_email(email, path_code=path_code)
         if result.status_code != 200:
             return result
         return Response(msg="인증 이메일을 재 전송하였습니다.", status=200)
@@ -236,7 +233,7 @@ class ForgotPasswordAPI(APIView):
         if provider is not None:
             return Response(msg=f"{provider}로 회원가입된 이메일입니다. {provider}에서 비밀번호 찾기를 진행해주세요.", status=400)
         
-        result = generate_send_email(request, email, path_code="password")
+        result = generate_send_email(email, path_code="password")
         if result.status_code != 200:
             return result
         return Response(msg="비밀번호 변경 이메일이 전송되었습니다.", status=200)
@@ -249,17 +246,10 @@ class ForgotPasswordAPI(APIView):
         identify_code = request.data.get('identifyCode')
         token = request.data.get('token')
         new_password = request.data.get('newPassword')
-        if not all(isinstance(value, str) and value for value in (identify_code, token, new_password)):
-            return Response(msg='유효한 비밀번호 변경 링크와 새 비밀번호가 필요합니다.', status=400)
-        with transaction.atomic():
-            user = User.objects.select_for_update().filter(identifyCode=identify_code).first()
-            if (user is None or not user.is_active or user.provider
-                    or not default_token_generator.check_token(user, token)):
-                return Response(msg='유효하지 않거나 만료된 비밀번호 변경 링크입니다.', status=400)
-            user.set_password(new_password)
-            user.save(update_fields=['password'])
-            for outstanding in OutstandingToken.objects.filter(user=user):
-                BlacklistedToken.objects.get_or_create(token=outstanding)
+        try:
+            reset_password(identify_code, token, new_password)
+        except PasswordResetError as exc:
+            return Response(msg=str(exc), status=400)
         return Response(msg="비밀번호 변경이 완료되었습니다. 다시 로그인해주세요.", status=200)
 
 @api_view(['GET'])

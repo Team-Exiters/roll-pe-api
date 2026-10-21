@@ -4,8 +4,10 @@ from .apis import signup_api, CustomTokenObtainPairAPI, logout_api, VerifyEmailA
 from .apis_social import social_login, KakaoLoginView, GoogleLoginView
 from .apple_browser import apple_start, apple_callback, apple_exchange
 from .social_browser import social_start, social_callback, social_exchange
+from .password_reset_views import password_reset_page
 
 urlpatterns = [
+    path('/password-reset/<str:identify_code>', password_reset_page, name='password_reset_page'),
     # path('signin', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('/signin', CustomTokenObtainPairAPI.as_view(), name='token_obtain_pair'),
     path('/token/refresh', RollpeTokenRefreshView.as_view(), name='token_refresh'),

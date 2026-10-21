@@ -196,10 +196,8 @@ EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'team.exiters@gmail.com'
+EMAIL_HOST_USER = 'projectrollpe@gmail.com'
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
-# EMAIL_HOST_USER = return_env_value('EMAIL_USER')
-# EMAIL_HOST_PASSWORD = return_env_value('EMAIL_PASSWORD')
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
 CSRF_TRUSTED_ORIGINS = ['https://dev.popping.world', 'http://localhost:8000', 'http://localhost:3000', 'http://0.0.0.0:8000', 'http://0.0.0.0:3000']
@@ -254,3 +252,18 @@ for return_url in APPLE_AUTH_RETURN_URLS + GOOGLE_AUTH_RETURN_URLS + KAKAO_AUTH_
 
 # Password reset links expire after 30 minutes.
 PASSWORD_RESET_TIMEOUT = 1800
+
+# Public installed-app certificate fingerprints; empty means Android links are unverified.
+ANDROID_APP_LINKS_SHA256_FINGERPRINTS = [
+    value.strip() for value in os.environ.get('ANDROID_APP_LINKS_SHA256_FINGERPRINTS', '').split(',')
+    if value.strip()
+]
+
+# The browser reset form posts to the API's own HTTPS origin.
+_api_origin = urlsplit('https://' + API_DOMAIN)
+if (_api_origin.hostname and _api_origin.netloc == API_DOMAIN
+        and not _api_origin.username and not _api_origin.password
+        and not _api_origin.path and not _api_origin.query and not _api_origin.fragment):
+    _trusted_api_origin = 'https://' + API_DOMAIN
+    if _trusted_api_origin not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(_trusted_api_origin)

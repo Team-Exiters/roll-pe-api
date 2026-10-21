@@ -62,3 +62,5 @@ KAKAO_AUTH_RETURN_URLS = ['http://localhost:8081/auth/kakao', 'reactnativerollpe
 
 # Password reset links expire after 30 minutes.
 PASSWORD_RESET_TIMEOUT = 1800
+
+ANDROID_APP_LINKS_SHA256_FINGERPRINTS = []

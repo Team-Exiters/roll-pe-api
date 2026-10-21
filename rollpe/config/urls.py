@@ -18,8 +18,11 @@ from django.contrib import admin
 from django.urls import path, include
 
 from paper.apis import QueryIndexAPI
+from user.app_links import apple_app_site_association, android_asset_links
 
 urlpatterns = [
+    path('.well-known/apple-app-site-association', apple_app_site_association),
+    path('.well-known/assetlinks.json', android_asset_links),
     path('admin', admin.site.urls),
     path('api/paper', include('paper.urls')),
     path('api/heart', include('heart.urls')),
