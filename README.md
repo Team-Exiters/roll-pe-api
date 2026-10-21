@@ -124,15 +124,61 @@ python manage.py cleanup_auth_flows --apply --limit 1000 --older-than-hours 24
 
 ## 비밀번호 재설정
 
-이메일 재설정 요청(`POST /api/user/forgot-password`)은 유지합니다. 메일의 HTTPS 링크는 `/forgot-password/{identifyCode}?token=...` 형식이며 30분 동안 유효합니다. 재설정 웹 화면은 쿼리의 `token`을 보존하고 `PATCH /api/user/forgot-password`에 `identifyCode`, `newPassword`, `token`을 함께 전송해야 합니다. 공개 식별자인 `identifyCode`만으로는 비밀번호를 바꿀 수 없습니다. 웹 재설정 화면은 이 저장소에 없으므로 서버 배포 시 해당 화면의 토큰 전달도 확인해야 합니다.
+이메일 요청(`POST /api/user/forgot-password`)은 유지합니다. 새 메일은 `https://rollpe.mooo.com/api/user/password-reset/{identifyCode}#token=...`으로 연결되고 30분 동안 유효합니다. 설치된 검증 앱은 같은 HTTPS 주소를 재설정 화면으로 열고, 앱이 없거나 연결되지 않으면 기존 Django 서버의 폼에서 완료합니다. 별도 웹 사이트나 RN 웹 배포는 필요하지 않습니다. 토큰은 fragment에만 넣어 서버 요청 URL·접근 로그로 전달하지 않습니다. 커스텀 scheme으로 토큰을 전달하지 않습니다.
+
+재설정 API의 `PATCH /api/user/forgot-password`는 `identifyCode`, `newPassword`, `token`을 요구합니다. 공개 식별자만으로는 변경할 수 없으며 이전 재설정 링크 대신 새 메일을 요청합니다.
 
 ## 배포 전 메일 설정
 
-`EMAIL_HOST_PASSWORD`는 이제 서버 환경변수 또는 기존 서버 `rollpe/.env`에 반드시 설정해야 합니다. 이 설정 없이 배포하면 인증·재설정 메일을 보낼 수 없습니다. 로컬에 보관한 값은 서버에 자동 반영되지 않습니다. 이전에 저장소에 포함된 SMTP 자격 증명은 노출된 것으로 취급해 교체하고 새 값은 서버에만 보관합니다.
+현재 발신 계정은 `projectrollpe@gmail.com`이며 Gmail SMTP(`smtp.gmail.com:587`, TLS)를 사용합니다. **Gmail 앱 비밀번호**는 이 계정으로 서버가 메일을 보낼 때 사용하는 16자리 암호입니다. 새 Gmail 계정을 만들라는 뜻은 아닙니다.
 
-`API_DOMAIN`은 이메일 인증 링크를 받는 실제 API 호스트, `BASE_DOMAIN`은 비밀번호 재설정 화면의 실제 웹 호스트로 설정합니다(스킴 없이 호스트와 필요한 포트만 지정). 기존 기본값은 호환을 위해 유지되며 현재 기본값만으로 운영 링크가 준비되었다고 판단하면 안 됩니다. 실제 재설정 웹 호스트는 아직 확정되지 않았으므로 배포 전에 설정과 링크를 확인해야 합니다.
+1. `projectrollpe@gmail.com`의 Google 계정에서 **2단계 인증**을 켭니다.
+2. 같은 계정의 [앱 비밀번호](https://myaccount.google.com/apppasswords)에서 `Roll-pe 서버` 등의 이름으로 암호를 생성합니다.
+3. 이 발신 계정에서 생성한 암호를 서버의 기존 `rollpe/.env` 또는 서버 환경변수 **`EMAIL_HOST_PASSWORD`**에 입력합니다. Google 계정의 일반 로그인 비밀번호를 넣지 않습니다. 앱·`EXPO_PUBLIC_`·Git에 넣거나 채팅으로 공유하지 않습니다.
+
+앱 비밀번호 메뉴가 없다면 계정 정책·보안 설정에 따라 사용이 제한될 수 있습니다. [Google 공식 안내](https://support.google.com/mail/answer/185833?hl=ko)를 확인합니다. Google 계정 비밀번호를 변경하면 앱 비밀번호도 폐기되므로 새 값을 서버에 반영해야 합니다. 이전 저장소에 포함된 SMTP 암호는 교체합니다. 다른 발신 계정의 기존 앱 비밀번호는 새 계정에 사용할 수 없습니다. 로컬 설정은 운영 서버에 자동 반영되지 않습니다.
+
+| 설정 | 필요한 경우 |
+| --- | --- |
+| `EMAIL_HOST_PASSWORD` | 회원가입 인증·재설정 메일 발송에 필수. 위 발신 계정에서 생성한 앱 비밀번호 |
+| `API_DOMAIN=rollpe.mooo.com` | 이메일 인증·재설정 링크의 API 호스트. 스킴 없이 지정 |
+| `ANDROID_APP_LINKS_SHA256_FINGERPRINTS` | Android 앱 자동 열기를 사용할 때 실제 설치 앱의 서명 SHA-256 등록. 미설정이어도 브라우저 재설정 가능 |
+
+현재 발신 주소·SMTP 호스트·포트는 코드 설정이므로 별도 `EMAIL_USER`·`EMAIL_PASSWORD` 환경변수는 사용하지 않습니다. `BASE_DOMAIN`도 새 재설정 메일에는 사용하지 않습니다. 메일 발송과 실제 기기에서의 앱 자동 열기는 배포 후 별도로 확인합니다.
 
 ## 요청 처리 변경
 
 - 회원가입은 권한 필드와 `is_test`를 무시하고 항상 이메일 인증을 요구합니다. 메일 발송 실패 시 회원을 만들지 않고 `503`을 반환합니다.
 - 롤페 생성은 로그인한 사용자를 호스트로 지정합니다. `/api/index`의 `POST`는 staff만 사용할 수 있으며 `GET`은 기존 동작을 유지합니다.
+
+## 검증된 앱 링크 배포
+
+iOS는 `42NW282TDP.dev.hugesilver.Roll-Pe`와 `/api/user/password-reset/*`만 AASA에 등록합니다. Apple Developer에서 해당 App ID의 Associated Domains 기능을 활성화하고 새 네이티브 빌드를 설치해야 합니다. Android는 패키지 `dev.hugesilver.RollPe`의 **실제 설치 앱 서명 인증서 SHA-256**이 필요합니다. EAS 빌드 인증서 또는 Play App Signing을 사용하는 경우 Play의 앱 서명 인증서와 일치시킵니다. 업로드 키와 혼동하지 않습니다.
+
+서버 `ANDROID_APP_LINKS_SHA256_FINGERPRINTS`에는 `AA:BB:...` 형식의 32바이트 지문을 쉼표로 구분해 설정합니다. 미설정·잘못된 형식이면 `assetlinks.json`은 빈 배열을 반환하고 Android 자동 열기를 허용하지 않습니다. 브라우저 폼은 계속 사용할 수 있습니다. 로컬 생성 프로젝트의 debug 서명은 배포/EAS/Play 서명을 증명하지 않으므로 자동 등록하지 않았습니다.
+
+Nginx가 `/api`만 Django로 전달한다면 기존 API 설정을 유지하고 아래 정확한 경로 두 개도 같은 Django upstream으로 전달합니다. `http://127.0.0.1:8000`은 현재 API의 `proxy_pass` 대상이 다르면 그 값으로 맞춥니다.
+
+```nginx
+location = /.well-known/apple-app-site-association {
+    proxy_pass http://127.0.0.1:8000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+location = /.well-known/assetlinks.json {
+    proxy_pass http://127.0.0.1:8000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+사용자가 배포 후 `sudo nginx -t`로 검사하고 승인한 설정을 반영한 다음 확인합니다. 아래 요청은 비밀값이나 메일 발송 없이 공개 메타데이터만 조회합니다. 두 응답 모두 리디렉션 없는 `200`, `Content-Type: application/json`이어야 합니다.
+
+```bash
+curl -i https://rollpe.mooo.com/.well-known/apple-app-site-association
+curl -i https://rollpe.mooo.com/.well-known/assetlinks.json
+```
+
+앱 설치 후 메일에서 링크를 눌러 iOS·Android의 종료/실행 중 상태를 확인합니다. Apple CDN 캐시나 사용자 브라우저 선택에 따라 브라우저가 열릴 수 있으며, 같은 도메인 브라우저 내부 이동만으로 Universal Link 성공을 판단하지 않습니다. Expo Go로 검증하지 않습니다.
+
+기준: [Expo iOS Universal Links](https://docs.expo.dev/linking/ios-universal-links/), [Expo Android App Links](https://docs.expo.dev/linking/android-app-links/), [Apple Associated Domains](https://developer.apple.com/documentation/xcode/supporting-associated-domains), [Android 사이트 연결](https://developer.android.com/training/app-links/configure-assetlinks).

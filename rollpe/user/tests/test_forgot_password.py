@@ -44,11 +44,12 @@ class ForgotPasswordTestCase(APITestCase):
         html_content = email.alternatives[0][0]
         self.assertEqual(email.to, ["test@test.com"])
         # 이메일 본문에서 토큰 추출
-        match = re.search(r"forgot-password/([\w\d]+)", html_content)
+        match = re.search(r"password-reset/([\w\d]+)", html_content)
         identify_code = match.group(1)
         self.assertEqual(identify_code, "Test12")
         self.assertIn("https://", html_content)
-        self.assertIn("?token=", html_content)
+        self.assertIn("#token=", html_content)
+        self.assertNotIn("?token=", html_content)
         # self.assertTrue(token, "Token not found in email body")
 
     def test_change_password_sucess(self):

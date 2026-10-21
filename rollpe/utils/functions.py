@@ -5,6 +5,7 @@ from smtplib import SMTPException
 
 from datetime import datetime, timedelta
 
+from django.urls import reverse
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.core.cache import cache
@@ -44,7 +45,7 @@ def verify_email_token(token):
     except jwt.InvalidTokenError:
         raise ValueError("유효하지 않은 링크입니다. 재전송 버튼을 눌러주세요.") 
 
-def generate_send_email(request, email, path_code):
+def generate_send_email(email, path_code):
     try:
         from_email = settings.EMAIL_HOST_USER
         to = [email]
@@ -64,12 +65,13 @@ def generate_send_email(request, email, path_code):
 
                 user = User.objects.get(email=email, is_active=True, provider__isnull=True)
                 token = default_token_generator.make_token(user)
-                activation_url = f"https://{settings.BASE_DOMAIN}/forgot-password/{user.identifyCode}?token={token}"
+                reset_path = reverse("password_reset_page", kwargs={"identify_code": user.identifyCode})
+                activation_url = f"https://{settings.API_DOMAIN}{reset_path}#token={token}"
 
                 html_content = (
                     '<p>비밀번호 찾기</p><br>'
                     '<p>아래 링크로 접속해서 비밀번호 변경을 진행해주세요.</p><br>'
-                    f'<p><a href="{activation_url}">비밀변호 변경하기</a></p>'
+                    f'<p><a href="{activation_url}">비밀번호 변경하기</a></p>'
                 )
 
         msg = EmailMultiAlternatives(subject, '', from_email, to)
