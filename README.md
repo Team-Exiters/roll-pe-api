@@ -182,3 +182,11 @@ curl -i https://rollpe.mooo.com/.well-known/assetlinks.json
 앱 설치 후 메일에서 링크를 눌러 iOS·Android의 종료/실행 중 상태를 확인합니다. Apple CDN 캐시나 사용자 브라우저 선택에 따라 브라우저가 열릴 수 있으며, 같은 도메인 브라우저 내부 이동만으로 Universal Link 성공을 판단하지 않습니다. Expo Go로 검증하지 않습니다.
 
 기준: [Expo iOS Universal Links](https://docs.expo.dev/linking/ios-universal-links/), [Expo Android App Links](https://docs.expo.dev/linking/android-app-links/), [Apple Associated Domains](https://developer.apple.com/documentation/xcode/supporting-associated-domains), [Android 사이트 연결](https://developer.android.com/training/app-links/configure-assetlinks).
+
+## 마음 수정 이력
+
+- 마음 응답의 `revisionCount`로 수정 여부를 표시합니다. 최초 작성 시 원본(0번)을 저장하고, 내용 또는 색상이 실제로 바뀔 때만 1..N차 기록을 추가합니다.
+- `/api/heart/revisions?hcode=...`는 방장과 해당 마음의 작성자만 조회할 수 있습니다. 각 기록에는 `number`, `content`, `color`, `editor`, `recordedAt`, `baseline`이 있습니다. 기록은 번호 순서로 반환합니다.
+- 기존 마음은 마이그레이션 적용 시점의 내용을 `baseline=true`인 기준본으로 저장합니다. 이미 덮어쓴 과거 원본은 복원할 수 없습니다. 마음이 삭제되면 이력도 함께 삭제됩니다.
+- Django 관리자에서 마음별 이력을 읽기 전용으로 확인할 수 있습니다.
+- 서버 반영 시 `python manage.py migrate`로 `heart.0004_participants_and_heart_history`를 적용하고 Gunicorn을 다시 로드합니다. 새 환경변수는 필요하지 않습니다.

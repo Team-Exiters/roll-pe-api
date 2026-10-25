@@ -1,9 +1,10 @@
 from rest_framework import serializers
 from django.utils.timezone import localtime
+from django.db import transaction
 
 from user.models import User
 from paper.models import Paper, QueryIndexTable
-from heart.models import Heart
+from heart.models import Heart, HeartRevision
 from user.serializers import UserViewSerializer
 
 # class HeartReadSerializer(serializers.ModelSerializer):
@@ -55,7 +56,7 @@ class HeartReadSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Heart
-        fields = ('id', 'index', 'author', 'content', 'createdAt', 'color', 'version', 'code')
+        fields = ('id', 'index', 'author', 'content', 'createdAt', 'color', 'version', 'code', 'revisionCount')
         depth = 1
        
     def get_createdAt(self, obj):
@@ -90,24 +91,36 @@ class HeartWriteSerializer(serializers.ModelSerializer):
         fields = ()
         
         
+    @transaction.atomic
     def create(self, validated_data):
-        
-        heart_instance = Heart.objects.create(
+        paper = Paper.objects.select_for_update().get(pk=validated_data['paperFK'])
+        heart = Heart.objects.create(
             userFK=User.objects.get(pk=validated_data['userFK']),
-            paperFK=Paper.objects.get(pk=validated_data['paperFK']),
+            paperFK=paper,
             colorFK=QueryIndexTable.objects.get(name=validated_data['color']),
-            context=validated_data['context'],
-            location=validated_data['location'],
+            context=validated_data['context'], location=validated_data['location'],
         )
-        return heart_instance
-    
+        HeartRevision.objects.create(heartFK=heart, number=0, content=heart.context,
+                                     color=heart.colorFK.name, editorFK=heart.userFK, recordedAt=heart.createdAt)
+        return heart
+
+    @transaction.atomic
     def update(self, validated_data):
-        
-        Heart.objects.filter(pk=validated_data['heartPK']).update(
-            colorFK=QueryIndexTable.objects.get(name=validated_data['color']),
-            context=validated_data['context'],
-            location=validated_data['location'],
-        )
-    
-    
-    
+        paper_id = Heart.objects.values_list('paperFK_id', flat=True).get(pk=validated_data['heartPK'])
+        Paper.objects.select_for_update().get(pk=paper_id)
+        heart = Heart.objects.get(pk=validated_data['heartPK'])
+        color = QueryIndexTable.objects.get(name=validated_data['color'])
+        if heart.context == validated_data['context'] and heart.colorFK_id == color.pk:
+            return heart
+        HeartRevision.objects.get_or_create(heartFK=heart, number=0, defaults={
+            'content': heart.context, 'color': heart.colorFK.name, 'editorFK': heart.userFK,
+            'recordedAt': heart.updatedAt, 'baseline': True,
+        })
+        heart.context = validated_data['context']
+        heart.colorFK = color
+        heart.location = validated_data['location']
+        heart.revisionCount += 1
+        heart.save(update_fields=['context', 'colorFK', 'location', 'revisionCount', 'updatedAt'])
+        HeartRevision.objects.create(heartFK=heart, number=heart.revisionCount, content=heart.context,
+                                     color=color.name, editorFK=heart.userFK, recordedAt=heart.updatedAt)
+        return heart
