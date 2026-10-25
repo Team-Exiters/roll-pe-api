@@ -438,7 +438,7 @@ class HeartUpdateAPITest(BaseTestSetup):
         
         # 테스트를 위해 시간을 인위적으로 조작
         paper = self.public_rolling_paper
-        paper.receivingDate = now().date() + timedelta(days=1)
+        paper.receivingDate = now().date() - timedelta(days=1)
         paper.save()
         
         response = self.client.patch(self.api_url, self.update_data, format='json')

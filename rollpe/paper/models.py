@@ -75,6 +75,7 @@ class Paper(BaseTimeModel):
 	password = models.CharField(max_length=128, null=True, blank=True)
 
 	invitingUser = models.ManyToManyField('user.User', related_name='inviting_user', blank=True)
+	blockedUsers = models.ManyToManyField('user.User', related_name='blocked_papers', blank=True)
 
 	def save(self, *args, **kwargs):
 		if not self.password:

@@ -63,6 +63,8 @@ class UserShowPaperSerializer(serializers.ModelSerializer):
 	def get_hearts(self, paper):
 
 		hearts = Heart.objects.filter(paperFK=paper)
+		if self.context.get('listing'):
+			return {'count': hearts.count()}
 		serializer = HeartReadSerializer(hearts, many=True)
 
 		if len(serializer.data) == 0:
@@ -74,7 +76,7 @@ class UserShowPaperSerializer(serializers.ModelSerializer):
 			}
 
 	def get_invitingUser(self, paper):
-		if not paper.invitingUser:
+		if self.context.get('listing') or not paper.invitingUser:
 			return []
 		return UserViewSerializer(paper.invitingUser.all(), many=True).data
 

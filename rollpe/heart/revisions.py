@@ -1,9 +1,10 @@
 from rest_framework.views import APIView
 
+from heart.apis import can_read
 from heart.models import Heart
 from user.serializers import UserViewSerializer
 from utils.response import Response
-from utils.share.functions import is_valid_uuid, is_invited_user
+from utils.share.functions import is_valid_uuid
 
 
 class HeartRevisionsAPI(APIView):
@@ -16,7 +17,7 @@ class HeartRevisionsAPI(APIView):
         heart = Heart.objects.select_related('paperFK').filter(code=code).first()
         if heart is None:
             return Response(status=404)
-        if not heart.paperFK.viewStat and not is_invited_user(request.user, heart.paperFK):
+        if not can_read(heart.paperFK, request.user):
             return Response(status=403)
         if request.user.pk not in (heart.userFK_id, heart.paperFK.hostFK_id):
             return Response(status=403)

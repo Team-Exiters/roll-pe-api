@@ -183,10 +183,12 @@ curl -i https://rollpe.mooo.com/.well-known/assetlinks.json
 
 기준: [Expo iOS Universal Links](https://docs.expo.dev/linking/ios-universal-links/), [Expo Android App Links](https://docs.expo.dev/linking/android-app-links/), [Apple Associated Domains](https://developer.apple.com/documentation/xcode/supporting-associated-domains), [Android 사이트 연결](https://developer.android.com/training/app-links/configure-assetlinks).
 
-## 마음 수정 이력
+## 참여자 관리와 마음 수정 이력
 
-- 마음 응답의 `revisionCount`로 수정 여부를 표시합니다. 최초 작성 시 원본(0번)을 저장하고, 내용 또는 색상이 실제로 바뀔 때만 1..N차 기록을 추가합니다.
-- `/api/heart/revisions?hcode=...`는 방장과 해당 마음의 작성자만 조회할 수 있습니다. 각 기록에는 `number`, `content`, `color`, `editor`, `recordedAt`, `baseline`이 있습니다. 기록은 번호 순서로 반환합니다.
-- 기존 마음은 마이그레이션 적용 시점의 내용을 `baseline=true`인 기준본으로 저장합니다. 이미 덮어쓴 과거 원본은 복원할 수 없습니다. 마음이 삭제되면 이력도 함께 삭제됩니다.
-- Django 관리자에서 마음별 이력을 읽기 전용으로 확인할 수 있습니다.
-- 서버 반영 시 `python manage.py migrate`로 `heart.0004_participants_and_heart_history`를 적용하고 Gunicorn을 다시 로드합니다. 새 환경변수는 필요하지 않습니다.
+- `/api/paper/participants`: 방장 전용 GET(목록), POST(`pcode`, `userId`로 초대), DELETE(강퇴). 초대된 사용자는 비공개 롤페도 비밀번호 없이 조회할 수 있습니다. 방장과 지정 수신자는 강퇴할 수 없습니다.
+- `/api/paper/leave`: POST(`pcode`)로 본인만 나갑니다. 방장은 나갈 수 없습니다. 나가기·강퇴는 해당 롤페의 본인 마음과 수정 이력을 함께 삭제합니다. 나가기는 재입장을 허용하지만 강퇴는 링크 입장·재초대를 차단합니다.
+- 전달 완료 또는 전달일 오전 10시(KST) 이후에는 초대·강퇴·나가기를 막아 완성본을 유지합니다. 참여자 변경과 마음 변경은 동일한 롤페 행을 잠그는 트랜잭션으로 처리합니다.
+- `/api/heart/revisions?hcode=...`: 해당 마음의 작성자와 방장만 조회할 수 있습니다. 각 기록에는 `number`(원본 0, 이후 1..N), `content`, `color`, `editor`, `recordedAt`, `baseline`이 있습니다. 내용 또는 색상이 실제로 바뀔 때만 새 기록을 추가합니다. 일반 마음 응답에는 `revisionCount`만 추가되며, 이전 본문은 포함하지 않습니다.
+- 기존 마음은 마이그레이션 적용 시점의 내용을 `baseline=true`인 기준본으로 저장합니다. 이미 덮어쓴 과거 원본은 복원할 수 없습니다. Django 관리자에서 마음별 이력을 읽기 전용으로 확인할 수 있습니다.
+- 공개 카드 목록에서는 마음 본문과 참여자 명단을 반환하지 않습니다. 상세 조회와 이력 조회의 접근 검사를 목록으로 우회할 수 없도록 합니다.
+- 서버 배포 시 `python manage.py migrate`로 `paper.0005_participants_and_heart_history`, `heart.0004_participants_and_heart_history`를 적용한 뒤 Gunicorn을 다시 로드합니다. 새 환경변수나 외부 서비스 설정은 필요하지 않습니다.
