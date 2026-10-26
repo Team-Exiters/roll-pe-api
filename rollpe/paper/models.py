@@ -85,3 +85,19 @@ class Paper(BaseTimeModel):
 				self.password = make_password(self.password)
 				
 		super().save(*args, **kwargs)
+
+
+class PaperInvitation(BaseTimeModel):
+    class Status(models.TextChoices):
+        PENDING = 'pending'
+        ACCEPTED = 'accepted'
+        DENIED = 'denied'
+
+    paper = models.ForeignKey(Paper, on_delete=models.CASCADE, related_name='invitations')
+    user = models.ForeignKey('user.User', on_delete=models.CASCADE, related_name='paper_invitations')
+    code = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    status = models.CharField(max_length=8, choices=Status.choices, default=Status.PENDING)
+    respondedAt = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['paper', 'user'], name='unique_paper_invitation_user')]
