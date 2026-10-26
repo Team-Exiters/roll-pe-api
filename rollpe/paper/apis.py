@@ -187,7 +187,13 @@ class PaperAPI(APIView):
 				status=status.HTTP_200_OK
 				)
 		else:
-			return Response(status=471)
+			# Entry prompts need only visibility and availability, never private contents.
+			return Response(status=471, data={
+				'code': str(paper.code),
+				'title': paper.title if paper.viewStat else '',
+				'viewStat': paper.viewStat,
+				'canEnter': not is_delivered(paper),
+			})
 
 	def post(self, request):
 		if not request.user.is_authenticated:

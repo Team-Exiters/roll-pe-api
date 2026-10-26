@@ -65,3 +65,42 @@ class PaperInfoAccessTests(APITestCase):
             response = self.client.post(reverse('paper_invite_api'), {'pcode': str(self.paper.code)}, format='json')
         self.assertEqual(response.status_code, 204)
         self.assertEqual(self.read_as(self.outsider, 9).status_code, 200)
+
+    def test_link_entry_metadata_exposes_only_visibility_availability_and_public_title(self):
+        for public in (False, True):
+            Paper.objects.filter(pk=self.paper.pk).update(viewStat=public)
+            response = self.read_as(self.outsider, 9)
+            self.assertEqual(response.status_code, 471)
+            self.assertEqual(response.json()['data'], {
+                'code': str(self.paper.code), 'title': self.paper.title if public else '',
+                'viewStat': public, 'canEnter': True,
+            })
+            self.assertFalse(self.paper.invitingUser.filter(pk=self.outsider.pk).exists())
+
+    def test_link_metadata_marks_scheduled_and_early_delivery_unavailable_without_changing_legacy_status(self):
+        self.assertTrue(self.read_as(self.outsider, 9, 59, 59).json()['data']['canEnter'])
+        self.assertFalse(self.read_as(self.outsider, 10).json()['data']['canEnter'])
+        Paper.objects.filter(pk=self.paper.pk).update(receivingStat=1)
+        response = self.read_as(self.outsider, 9)
+        self.assertEqual(response.status_code, 471)
+        self.assertFalse(response.json()['data']['canEnter'])
+        self.assertFalse(self.paper.invitingUser.filter(pk=self.outsider.pk).exists())
+
+    def test_blocked_and_anonymous_links_never_return_entry_metadata(self):
+        self.paper.blockedUsers.add(self.outsider)
+        for user, expected in ((self.outsider, 403), (None, 401)):
+            response = self.read_as(user, 9)
+            self.assertEqual(response.status_code, expected)
+            self.assertIsNone(response.json()['data'])
+
+    def test_private_entry_still_requires_password_and_success_removes_the_entry_prompt(self):
+        response = self.read_as(self.outsider, 9)
+        self.assertFalse(response.json()['data']['viewStat'])
+        with patch('paper.lifecycle.timezone.now', return_value=timezone.make_aware(datetime(2026, 10, 25, 9))):
+            for body, status in (({}, 400), ({'password': 'wrong-local-test-password'}, 472),
+                                 ({'password': 'test-only-paper-password'}, 204)):
+                response = self.client.post(reverse('paper_invite_api'), {
+                    'pcode': str(self.paper.code), **body,
+                }, format='json')
+                self.assertEqual(response.status_code, status)
+        self.assertEqual(self.read_as(self.outsider, 9).status_code, 200)
