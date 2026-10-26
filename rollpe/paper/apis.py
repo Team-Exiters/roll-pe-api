@@ -9,12 +9,13 @@ from heart.models import Heart
 from paper.serializer import UserShowPaperSerializer, PaperCreateSerializer, QueryIndexSerializer, \
 	QueryIndexCreateSerializer
 from paper.lifecycle import delivered_paper_filter, is_delivered
+from paper.invitations import accept_invitation
 from user.models import User
 from utils.response import Response
 from rest_framework.views import APIView
 
 from utils.share.functions import is_invited_user, is_blocked_user
-from .models import Paper, QueryIndexTable
+from .models import Paper, PaperInvitation, QueryIndexTable
 
 
 class UserPaperAPI(APIView):
@@ -192,11 +193,13 @@ class PaperAPI(APIView):
 				)
 		else:
 			# Entry prompts need only visibility and availability, never private contents.
+			invitation = PaperInvitation.objects.filter(paper=paper, user=user, status=PaperInvitation.Status.PENDING, paper__hostFK__is_active=True).first()
 			return Response(status=471, data={
 				'code': str(paper.code),
-				'title': paper.title if paper.viewStat else '',
+				'title': paper.title if paper.viewStat or invitation else '',
 				'viewStat': paper.viewStat,
 				'canEnter': not is_delivered(paper),
+				**({'invitationCode': str(invitation.code)} if invitation else {}),
 			})
 
 	def post(self, request):
@@ -261,6 +264,10 @@ class PaperEnterManageAPI(APIView):
                 return Response(status=473)
             if is_delivered(paper):
                 return Response(status=483)
+            invitation = PaperInvitation.objects.filter(paper=paper, user=request.user, status=PaperInvitation.Status.PENDING, paper__hostFK__is_active=True).first()
+            if invitation is not None:
+                accept_invitation(invitation)
+                return Response(status=204)
             if not paper.viewStat:
                 password = request.data.get('password')
                 if not isinstance(password, str) or not password:

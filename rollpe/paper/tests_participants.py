@@ -69,8 +69,9 @@ class PaperParticipantsTests(PaperParticipantsFixture):
         for _ in range(2):
             self.assertEqual(self.change('post', self.other).status_code, 204)
         self.client.force_authenticate(self.other)
+        self.assertEqual(self.client.get('/api/paper', {'pcode': str(self.paper.code)}).status_code, 471)
+        self.assertEqual(self.client.post('/api/paper/enter', {'pcode': str(self.paper.code)}, format='json').status_code, 204)
         self.assertEqual(self.client.get('/api/paper', {'pcode': str(self.paper.code)}).status_code, 200)
-        self.assertEqual(self.client.post('/api/paper/enter', {'pcode': str(self.paper.code)}, format='json').status_code, 473)
         self.paper.refresh_from_db()
         self.assertTrue(check_password('local-paper-test', self.paper.password))
 

@@ -5,6 +5,7 @@ from rest_framework.views import APIView
 
 from heart.models import Heart
 from paper.lifecycle import is_delivered
+from paper.invitations import invite_user
 from paper.models import Paper
 from user.models import User
 from user.serializers import UserViewSerializer
@@ -96,7 +97,7 @@ class PaperParticipantsAPI(APIView):
             else:
                 if paper.blockedUsers.filter(pk=target.pk).exists():
                     return Response(status=403, data={'reason': 'blocked'})
-                paper.invitingUser.add(target)
+                return invite_user(paper, target)
             return Response(status=204)
 
 
