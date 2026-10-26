@@ -22,16 +22,20 @@ class UserPaperAPI(APIView):
 
 	def get(self, request):
 		type = request.GET.get("type", "all")
+		# Discovery lists contain public papers only; private papers remain reachable
+		# through the authenticated host/invitation lists and explicit entry links.
+		queryset = Paper.objects.filter(viewStat=True)
+		if request.user.is_authenticated:
+			queryset = queryset.exclude(blockedUsers=request.user)
+		queryset = queryset.order_by('-createdAt', '-pk')
 
 		# TODO hot한 롤페의 기준을 정해야 한다.
 		if type == "hot":
-			queryset = Paper.objects.exclude(blockedUsers=request.user).order_by('-createdAt')[:6] if request.user.is_authenticated else Paper.objects.all().order_by('-createdAt')[:6]
 			return Response(
-				data=UserShowPaperSerializer(queryset, many=True, context={'listing': True}).data,
+				data=UserShowPaperSerializer(queryset[:6], many=True, context={'listing': True}).data,
 				status=status.HTTP_200_OK
 				)
 
-		queryset = Paper.objects.exclude(blockedUsers=request.user).order_by('-createdAt') if request.user.is_authenticated else Paper.objects.all().order_by('-createdAt')
 		if queryset.count() == 0:
 			return Response(status=status.HTTP_404_NOT_FOUND)
 

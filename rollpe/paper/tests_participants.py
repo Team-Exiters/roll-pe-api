@@ -158,6 +158,7 @@ class PaperParticipantsTests(PaperParticipantsFixture):
 
     def test_public_card_lists_do_not_disclose_memo_content_or_participant_lists(self):
         self.assertEqual(self.write().status_code, 201)
+        Paper.objects.filter(pk=self.paper.pk).update(viewStat=True)
         self.client.force_authenticate(None)
         for params in ({'type': 'hot'}, {}):
             response = self.client.get('/api/paper/user', params)
