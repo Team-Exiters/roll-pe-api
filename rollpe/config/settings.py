@@ -16,6 +16,8 @@ from urllib.parse import urlsplit
 import uuid
 from utils.env import return_env_value
 from datetime import timedelta
+from django.core.exceptions import ImproperlyConfigured, ValidationError
+from django.core.validators import URLValidator
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -28,9 +30,31 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = return_env_value("DJANGO_SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = return_env_value("DJANGO_DEBUG")
+DEBUG = return_env_value("DJANGO_DEBUG", cast=bool, default=False)
 
-ALLOWED_HOSTS = ['*']
+API_DOMAIN = return_env_value('API_DOMAIN').strip()
+try:
+    _api_origin = urlsplit('https://' + API_DOMAIN)
+    URLValidator(schemes=['https'])(_api_origin.geturl())
+    if (not API_DOMAIN or _api_origin.netloc != API_DOMAIN
+            or _api_origin.username or _api_origin.password
+            or _api_origin.path or _api_origin.query or _api_origin.fragment
+            or _api_origin.port == 0):
+        raise ValueError
+except (ValueError, ValidationError):
+    raise ImproperlyConfigured('API_DOMAIN must contain only a host and optional port, without a scheme or path.') from None
+
+_api_host = _api_origin.hostname
+if ':' in _api_host:
+    _api_host = f'[{_api_host}]'
+ALLOWED_HOSTS = [
+    host.strip() for host in return_env_value(
+        'DJANGO_ALLOWED_HOSTS', cast=list,
+        default=[_api_host, 'localhost', '127.0.0.1', '[::1]'],
+    ) if host.strip()
+]
+if not ALLOWED_HOSTS or '*' in ALLOWED_HOSTS:
+    raise ImproperlyConfigured('DJANGO_ALLOWED_HOSTS must list explicit hosts; a wildcard is not allowed.')
 
 # Application definition
 
@@ -200,7 +224,12 @@ EMAIL_HOST_USER = 'projectrollpe@gmail.com'
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
-CSRF_TRUSTED_ORIGINS = ['https://dev.popping.world', 'http://localhost:8000', 'http://localhost:3000', 'http://0.0.0.0:8000', 'http://0.0.0.0:3000']
+CSRF_TRUSTED_ORIGINS = ['https://' + API_DOMAIN]
+if DEBUG:
+    CSRF_TRUSTED_ORIGINS += [
+        'http://localhost:8000', 'http://localhost:3000',
+        'http://0.0.0.0:8000', 'http://0.0.0.0:3000',
+    ]
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # CORS Config
@@ -210,7 +239,6 @@ CORS_ALLOWED_ORIGINS = [
 CORS_ALLOW_CREDENTIALS = True
 
 BASE_DOMAIN = os.environ.get('BASE_DOMAIN', 'localhost:3000')
-API_DOMAIN = os.environ.get('API_DOMAIN', 'dev.popping.world')
 
 # Apple browser authentication. Keep the private key only on the API server.
 # return_env_value above loads rollpe/.env before these values are read.
@@ -229,7 +257,7 @@ APPLE_AUTH_RETURN_URLS = [
 GOOGLE_AUTH_CLIENT_ID = os.environ.get('GOOGLE_AUTH_CLIENT_ID', os.environ.get('WEB_GOOGLE_OAUTH_CLIENT_KEY', ''))
 GOOGLE_AUTH_CLIENT_SECRET = os.environ.get('GOOGLE_AUTH_CLIENT_SECRET', os.environ.get('GOOGLE_OAUTH_CLIENT_ID', ''))
 GOOGLE_AUTH_REDIRECT_URI = os.environ.get(
-    'GOOGLE_AUTH_REDIRECT_URI', 'https://rollpe.mooo.com/api/user/social/login/google/callback',
+    'GOOGLE_AUTH_REDIRECT_URI', f'https://{API_DOMAIN}/api/user/social/login/google/callback',
 )
 GOOGLE_AUTH_RETURN_URLS = [
     value.strip() for value in os.environ.get('GOOGLE_AUTH_RETURN_URLS', '').split(',') if value.strip()
@@ -238,7 +266,7 @@ KAKAO_AUTH_CLIENT_ID = os.environ.get('KAKAO_AUTH_CLIENT_ID', os.environ.get('SO
 KAKAO_AUTH_CLIENT_SECRET = os.environ.get('KAKAO_AUTH_CLIENT_SECRET', '')
 KAKAO_AUTH_APP_ID = os.environ.get('KAKAO_AUTH_APP_ID', '')
 KAKAO_AUTH_REDIRECT_URI = os.environ.get(
-    'KAKAO_AUTH_REDIRECT_URI', 'https://rollpe.mooo.com/api/user/social/login/kakao/callback',
+    'KAKAO_AUTH_REDIRECT_URI', f'https://{API_DOMAIN}/api/user/social/login/kakao/callback',
 )
 KAKAO_AUTH_RETURN_URLS = [
     value.strip() for value in os.environ.get('KAKAO_AUTH_RETURN_URLS', '').split(',') if value.strip()
@@ -258,12 +286,3 @@ ANDROID_APP_LINKS_SHA256_FINGERPRINTS = [
     value.strip() for value in os.environ.get('ANDROID_APP_LINKS_SHA256_FINGERPRINTS', '').split(',')
     if value.strip()
 ]
-
-# The browser reset form posts to the API's own HTTPS origin.
-_api_origin = urlsplit('https://' + API_DOMAIN)
-if (_api_origin.hostname and _api_origin.netloc == API_DOMAIN
-        and not _api_origin.username and not _api_origin.password
-        and not _api_origin.path and not _api_origin.query and not _api_origin.fragment):
-    _trusted_api_origin = 'https://' + API_DOMAIN
-    if _trusted_api_origin not in CSRF_TRUSTED_ORIGINS:
-        CSRF_TRUSTED_ORIGINS.append(_trusted_api_origin)

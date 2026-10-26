@@ -141,10 +141,14 @@ python manage.py cleanup_auth_flows --apply --limit 1000 --older-than-hours 24
 | 설정 | 필요한 경우 |
 | --- | --- |
 | `EMAIL_HOST_PASSWORD` | 회원가입 인증·재설정 메일 발송에 필수. 위 발신 계정에서 생성한 앱 비밀번호 |
-| `API_DOMAIN=rollpe.mooo.com` | 이메일 인증·재설정 링크의 API 호스트. 스킴 없이 지정 |
+| `API_DOMAIN` | 필수. 이메일 인증·재설정 링크의 실제 API 호스트를 스킴·경로 없이 지정. 미설정·잘못된 주소이면 시작 중단 |
+| `DJANGO_DEBUG=False` | 운영 서버에서는 디버그 비활성화. 미설정 시에도 `False`이며 문자열을 불리언으로 변환 |
+| `DJANGO_ALLOWED_HOSTS` | 선택. 쉼표로 구분한 요청 허용 호스트. 미설정 시 API 호스트와 로컬 프록시용 루프백 호스트를 허용하며 `*`는 거부 |
 | `ANDROID_APP_LINKS_SHA256_FINGERPRINTS` | Android 앱 자동 열기를 사용할 때 실제 설치 앱의 서명 SHA-256 등록. 미설정이어도 브라우저 재설정 가능 |
 
 현재 발신 주소·SMTP 호스트·포트는 코드 설정이므로 별도 `EMAIL_USER`·`EMAIL_PASSWORD` 환경변수는 사용하지 않습니다. `BASE_DOMAIN`도 새 재설정 메일에는 사용하지 않습니다. 메일 발송과 실제 기기에서의 앱 자동 열기는 배포 후 별도로 확인합니다.
+
+Google·카카오의 서버 콜백 기본 주소와 HTTPS CSRF 허용 주소도 `API_DOMAIN`을 사용합니다. 별도로 등록한 `GOOGLE_AUTH_REDIRECT_URI`·`KAKAO_AUTH_REDIRECT_URI`는 유지합니다. 운영 CSRF 허용 주소에서 예전 도메인을 제거했으며 로컬 개발용 주소는 `DJANGO_DEBUG=True`일 때만 추가합니다. 설정을 바꾼 뒤에는 Gunicorn을 리로드합니다.
 
 ## 요청 처리 변경
 
