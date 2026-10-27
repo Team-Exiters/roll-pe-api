@@ -27,7 +27,7 @@ class ChangePasswordTestCase(APITestCase):
 
         self.change_data = {
             'refresh':self.login_response.json().get('data').get('refresh'),
-            'newPassword':'testnewpassword',
+            'newPassword':'Test-new123!',
         }
         self.change_invalid_data = {
             'refresh':self.login_response.json().get('data').get('refresh'),

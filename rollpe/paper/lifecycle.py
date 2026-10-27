@@ -16,9 +16,9 @@ def is_delivered(paper):
     return paper.receivingStat == 1 or timezone.now() >= delivery_deadline(paper)
 
 
-def delivered_paper_filter():
+def delivered_paper_filter(prefix=''):
     now = timezone.localtime(timezone.now(), KOREA)
-    scheduled = Q(receivingDate__lt=now.date())
+    scheduled = Q(**{f'{prefix}receivingDate__lt': now.date()})
     if now.hour >= 10:
-        scheduled |= Q(receivingDate=now.date())
-    return Q(receivingStat=1) | scheduled
+        scheduled |= Q(**{f'{prefix}receivingDate': now.date()})
+    return Q(**{f'{prefix}receivingStat': 1}) | scheduled

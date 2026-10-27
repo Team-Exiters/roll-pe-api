@@ -55,7 +55,7 @@ class PaperAPITest(APITestCase):
 	def setUp(self):
 		self.user = baker.make(get_user_model())
 		self.client.force_authenticate(user=self.user)
-		self.paper = baker.make(Paper, hostFK=self.user)
+		self.paper = baker.make(Paper, hostFK=self.user, receivingDate='2099-01-01', receivingStat=0)
 
 	def test_get_paper_detail(self):
 		url = reverse('paper_api') + f'?pcode={self.paper.code}'

@@ -6,7 +6,7 @@ from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
 
 from heart.models import Heart
-from paper.serializer import UserShowPaperSerializer, PaperCreateSerializer, QueryIndexSerializer, \
+from paper.serializer import UserShowPaperSerializer, PaperCreateSerializer, PaperSettingsSerializer, QueryIndexSerializer, \
 	QueryIndexCreateSerializer
 from paper.lifecycle import delivered_paper_filter, is_delivered
 from paper.invitations import accept_invitation
@@ -91,14 +91,7 @@ class UserPaperAPI(APIView):
 
 
 class MyPagePaperAPI(APIView):
-	"""
-	count
-	1. 내가 작성한(호스트가 나)인 롤페
-
-	card
-	1. 내 롤페(내가 작성한(호스트)한 + 받은 롤페)
-	2. 내가 참여한 롤페
-	"""
+	"""개인 통계와 생성·수신·참여 목록. inviting은 기존 앱 호환용으로 유지합니다."""
 	pagination_class = PageNumberPagination
 
 	def get(self, request):
@@ -108,8 +101,8 @@ class MyPagePaperAPI(APIView):
 
 
 		if request.GET.get("type") == 'main':
-			host_paper = len(Paper.objects.filter(hostFK=user))
-			heart = len(Heart.objects.filter(userFK=user))
+			host_paper = Paper.objects.filter(hostFK=user).count()
+			heart = Heart.objects.filter(userFK=user).count()
 
 			data = {
 				"host": host_paper,
@@ -126,13 +119,22 @@ class MyPagePaperAPI(APIView):
 		elif request.GET.get("type") == 'inviting':
 			query = Paper.objects.filter(invitingUser=user)
 
+		elif request.GET.get("type") == 'participating':
+			# Keep the legacy inviting list; the new menu means active participation,
+			# independently of pending invitations and papers hosted by this user.
+			query = Paper.objects.filter(invitingUser=user).exclude(hostFK=user).exclude(delivered_paper_filter())
+
 		else:
 			return Response(
-				msg="Query Param type은 main, my, host, inviting이 존재합니다.",
+				msg="Query Param type은 main, my, host, inviting, participating이 존재합니다.",
 				status=status.HTTP_400_BAD_REQUEST
 				)
 
-		if len(query) == 0 :
+		query = (query.exclude(blockedUsers=user)
+				 .select_related('hostFK', 'receiverFK', 'themeFK', 'sizeFK', 'ratioFK')
+				 .order_by('-createdAt', '-pk'))
+
+		if request.GET.get('type') != 'participating' and not query.exists():
 			return Response(
 				data=[],
 				status=status.HTTP_200_OK
@@ -141,7 +143,7 @@ class MyPagePaperAPI(APIView):
 
 		paginator = self.pagination_class()
 		page = paginator.paginate_queryset(query, request)  # <- 페이지 분할
-		serializer = UserShowPaperSerializer(page, many=True)
+		serializer = UserShowPaperSerializer(page, many=True, context={'listing': True})
 
 
 		return Response(
@@ -184,9 +186,10 @@ class PaperAPI(APIView):
 		if is_blocked_user(user, paper):
 			return Response(status=403, msg='이 롤페에 다시 참여할 수 없습니다.')
 
-		# Delivery makes the receiver eligible to read even without writer membership.
-		can_receive = paper.receiverFK_id == user.pk and is_delivered(paper)
-		if is_invited_user(user=user, paper=paper) or can_receive:
+		# Once delivered, host/writer membership and public visibility no longer grant access.
+		delivered = is_delivered(paper)
+		can_read = paper.receiverFK_id == user.pk if delivered else is_invited_user(user=user, paper=paper)
+		if can_read:
 			return Response(
 				data=UserShowPaperSerializer(paper).data,
 				status=status.HTTP_200_OK
@@ -198,7 +201,7 @@ class PaperAPI(APIView):
 				'code': str(paper.code),
 				'title': paper.title if paper.viewStat or invitation else '',
 				'viewStat': paper.viewStat,
-				'canEnter': not is_delivered(paper),
+				'canEnter': not delivered,
 				**({'invitationCode': str(invitation.code)} if invitation else {}),
 			})
 
@@ -216,6 +219,29 @@ class PaperAPI(APIView):
 				)
 		return Response(data=serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+	def patch(self, request):
+		if not request.user.is_authenticated:
+			return Response(status=401)
+		if not isinstance(request.data, dict) or not isinstance(request.data.get('pcode'), str):
+			return Response(status=400, msg='pcode와 수정할 설정이 필요합니다.')
+		with transaction.atomic():
+			try:
+				paper = Paper.objects.select_for_update().get(code=request.data['pcode'])
+			except (ValidationError, ValueError, TypeError):
+				return Response(status=400, msg='올바르지 않은 pcode입니다.')
+			except Paper.DoesNotExist:
+				return Response(status=404)
+			if paper.hostFK_id != request.user.pk or is_blocked_user(request.user, paper):
+				return Response(status=403, msg='방장만 롤페 설정을 수정할 수 있습니다.')
+			if is_delivered(paper):
+				return Response(status=483, msg='전달이 완료된 롤페는 수정할 수 없습니다.')
+			serializer = PaperSettingsSerializer(paper, data={key: value for key, value in request.data.items() if key != 'pcode'})
+			if not serializer.is_valid():
+				return Response(status=400, msg='롤페 설정을 확인해주세요.', data=serializer.errors)
+			paper = serializer.save()
+			return Response(status=200, msg='롤페 설정을 변경하였습니다.', data={
+				'code': str(paper.code), 'viewStat': paper.viewStat, 'receivingDate': paper.receivingDate,
+			})
 
 class PaperSendAPI(APIView):
     """Close writing early and deliver to the receiver selected when the paper was created."""

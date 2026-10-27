@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.db.models import Q
 from rest_framework.decorators import api_view
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.views import APIView
@@ -6,14 +7,17 @@ from rest_framework.views import APIView
 from heart.models import Heart
 from heart.serializers import HeartReadSerializer, HeartWriteSerializer
 from paper.models import Paper, QueryIndexTable
-from paper.lifecycle import is_delivered
+from paper.lifecycle import delivered_paper_filter, is_delivered
 from utils.response import Response
 from utils.share.functions import is_invited_user, is_valid_uuid, is_host, is_blocked_user
 
 
 def can_read(paper, user):
-    return not is_blocked_user(user, paper) and (paper.viewStat or is_invited_user(user, paper)
-            or (paper.receiverFK_id == user.pk and is_delivered(paper)))
+    if is_blocked_user(user, paper):
+        return False
+    if is_delivered(paper):
+        return paper.receiverFK_id == user.pk
+    return paper.viewStat or is_invited_user(user, paper)
 
 
 def mutation_error(paper, user, data=None):
@@ -145,7 +149,10 @@ def get_my_heart_list(request):
     if not request.user.is_authenticated:
             return Response(status=401)
 
-    heart_instance_list = Heart.objects.filter(userFK=request.user).order_by('-createdAt')
+    # Authorship does not retain access to a paper after it has been delivered.
+    heart_instance_list = (Heart.objects.filter(userFK=request.user)
+                           .filter(Q(paperFK__receiverFK=request.user) | ~delivered_paper_filter('paperFK__'))
+                           .exclude(paperFK__blockedUsers=request.user).order_by('-createdAt', '-pk'))
     
     pagination_class = PageNumberPagination
     paginator = pagination_class()

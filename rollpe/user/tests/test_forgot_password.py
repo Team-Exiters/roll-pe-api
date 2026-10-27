@@ -91,14 +91,26 @@ class ForgotPasswordTestCase(APITestCase):
         response = self.client.post(reverse('token_refresh'), {'refresh': refresh}, format='json')
         self.assertEqual(response.status_code, 401)
 
-    def test_social_and_inactive_accounts_cannot_reset(self):
-        for provider, active in [('apple', True), (None, False)]:
-            self.user.provider, self.user.is_active = provider, active
-            self.user.save()
-            response = self.client.patch(self.change_password_url, {
-                **self.change_data, 'token': default_token_generator.make_token(self.user),
-            }, format='json')
-            self.assertEqual(response.status_code, 400)
+    @patch('user.apis.generate_send_email')
+    def test_social_and_inactive_accounts_cannot_reset(self, send_email):
+        for provider, active in [('apple', True), ('google', True), ('kakao', True), (None, False)]:
+            with self.subTest(provider=provider, active=active):
+                self.user.provider, self.user.is_active = provider, active
+                self.user.save()
+                response = self.client.post(self.change_password_url, {
+                    'email': self.user.email,
+                }, format='json')
+                self.assertEqual(response.status_code, 400)
+                if provider:
+                    self.assertEqual(response.json()['message'],
+                                     '소셜 로그인 계정은 별도의 롤페 비밀번호를 사용하지 않습니다.')
+                send_email.assert_not_called()
+                response = self.client.patch(self.change_password_url, {
+                    **self.change_data, 'token': default_token_generator.make_token(self.user),
+                }, format='json')
+                self.assertEqual(response.status_code, 400)
+                self.user.refresh_from_db()
+                self.assertTrue(self.user.check_password('testpassword'))
 
     def test_missing_and_unknown_reset_input_returns_controlled_error(self):
         self.assertEqual(self.client.post(self.change_password_url, {}, format='json').status_code, 400)

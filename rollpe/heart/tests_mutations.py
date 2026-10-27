@@ -115,7 +115,8 @@ class HeartMutationTests(APITestCase):
         self.assertTrue(Heart.objects.filter(pk=other.pk).exists())
         self.assertTrue(Paper.objects.filter(pk=self.paper.pk).exists())
         self.assertTrue(self.paper.invitingUser.filter(pk=self.writer.pk).exists())
-        detail = self.client.get('/api/paper', {'pcode': str(self.paper.code)}).json()['data']
+        with patch('paper.lifecycle.timezone.now', return_value=timezone.make_aware(datetime(2026, 10, 25, 9))):
+            detail = self.client.get('/api/paper', {'pcode': str(self.paper.code)}).json()['data']
         self.assertEqual(detail['hearts']['count'], 1)
         self.assertEqual(detail['hearts']['data'][0]['id'], other.pk)
         self.assertEqual(self.send('post', self.body).status_code, 201)

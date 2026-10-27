@@ -123,3 +123,53 @@ class PaperDeliveryTests(APITestCase):
             self.assertEqual(self.received_codes(), [str(self.paper.code)])
             self.assertEqual(self.client.get('/api/paper', {'pcode': str(self.paper.code)}).status_code, 200)
             self.assertEqual(self.client.get('/api/heart', {'hcode': str(self.heart.code)}).status_code, 200)
+
+    def test_delivered_content_is_receiver_only_across_public_and_private_read_routes(self):
+        for public in (False, True):
+            Paper.objects.filter(pk=self.paper.pk).update(viewStat=public)
+            for delivery in ({'receivingStat': 1, 'receivingDate': '2026-10-29'},
+                             {'receivingStat': 0, 'receivingDate': '2026-10-25'}):
+                Paper.objects.filter(pk=self.paper.pk).update(**delivery)
+                for user in (self.host, self.writer, self.outsider):
+                    self.client.force_authenticate(user)
+                    for route, query in (('/api/paper', {'pcode': str(self.paper.code)}),
+                                         ('/api/heart', {'pcode': str(self.paper.code)}),
+                                         ('/api/heart', {'hcode': str(self.heart.code)}),
+                                         ('/api/heart/revisions', {'hcode': str(self.heart.code)}),
+                                         ('/api/paper/participants', {'pcode': str(self.paper.code)})):
+                        response = self.client.get(route, query)
+                        self.assertNotEqual(response.status_code, 200)
+                        self.assertNotIn(self.heart.context, str(response.json()))
+                    self.assertEqual(self.client.get('/api/heart/my').json()['data']['count'], 0)
+                self.client.force_authenticate(self.receiver)
+                for route, query in (('/api/paper', {'pcode': str(self.paper.code)}),
+                                     ('/api/heart', {'hcode': str(self.heart.code)}),
+                                     ('/api/heart', {'pcode': str(self.paper.code)})):
+                    response = self.client.get(route, query)
+                    self.assertEqual(response.status_code, 200)
+                    self.assertIn(self.heart.context, str(response.json()))
+        self.client.force_authenticate(self.host)
+        history = self.client.get('/api/paper/mypage', {'type': 'host'}).json()['data']
+        self.assertEqual(history['results'][0]['code'], str(self.paper.code))
+        self.assertNotIn(self.heart.context, str(history))
+
+    def test_receiver_who_is_also_host_or_author_keeps_receiver_access(self):
+        for receiver in (self.host, self.writer):
+            Paper.objects.filter(pk=self.paper.pk).update(receiverFK=receiver, receivingStat=1)
+            self.client.force_authenticate(receiver)
+            self.assertEqual(self.client.get('/api/paper', {'pcode': str(self.paper.code)}).status_code, 200)
+            self.assertEqual(self.client.get('/api/heart', {'hcode': str(self.heart.code)}).status_code, 200)
+            self.assertEqual(self.client.get('/api/heart/my').json()['data']['count'], int(receiver == self.writer))
+
+    def test_same_day_privacy_and_own_heart_list_switch_at_exactly_ten_am(self):
+        Paper.objects.filter(pk=self.paper.pk).update(receivingDate='2026-10-26')
+        for instant, delivered in ((datetime(2026, 10, 26, 9, 59, 59), False),
+                                   (datetime(2026, 10, 26, 10), True)):
+            with patch('paper.lifecycle.timezone.now', return_value=timezone.make_aware(instant)):
+                for user in (self.host, self.writer):
+                    self.client.force_authenticate(user)
+                    self.assertEqual(self.client.get('/api/paper', {'pcode': str(self.paper.code)}).status_code, 471 if delivered else 200)
+                    self.assertEqual(self.client.get('/api/heart', {'hcode': str(self.heart.code)}).status_code, 471 if delivered else 200)
+                self.assertEqual(self.client.get('/api/heart/my').json()['data']['count'], 0 if delivered else 1)
+                self.client.force_authenticate(self.receiver)
+                self.assertEqual(self.client.get('/api/paper', {'pcode': str(self.paper.code)}).status_code, 200 if delivered else 471)
