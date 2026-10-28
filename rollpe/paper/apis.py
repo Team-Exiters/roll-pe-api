@@ -26,7 +26,7 @@ class UserPaperAPI(APIView):
 		type = request.GET.get("type", "all")
 		# Discovery lists contain public papers only; private papers remain reachable
 		# through the authenticated host/invitation lists and explicit entry links.
-		queryset = Paper.objects.filter(viewStat=True)
+		queryset = Paper.objects.filter(viewStat=True).exclude(delivered_paper_filter())
 		if request.user.is_authenticated:
 			queryset = queryset.exclude(blockedUsers=request.user)
 		queryset = queryset.order_by('-createdAt', '-pk')

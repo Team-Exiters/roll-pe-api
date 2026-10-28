@@ -16,7 +16,8 @@ class UserPaperAPITest(APITestCase):
 		self.ratio = baker.make(QueryIndexTable, type='RATIO')
 
 	def test_get_papers(self):
-		paper = baker.make(Paper, hostFK=self.user, themeFK=self.theme, sizeFK=self.size, ratioFK=self.ratio)
+		paper = baker.make(Paper, hostFK=self.user, themeFK=self.theme, sizeFK=self.size, ratioFK=self.ratio,
+			viewStat=True, receivingDate='2099-01-01', receivingStat=0)
 		url = reverse('paper_api_for_user')
 		response = self.client.get(url)
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
