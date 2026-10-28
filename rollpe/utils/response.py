@@ -28,6 +28,11 @@ class CustomResponse(JsonResponse):
             charset='utf-8',
             **kwargs
         )
+		# No-content responses must not advertise the JSON envelope as a body.
+		# Otherwise native clients can reject the non-zero Content-Length.
+		if http_status == status.HTTP_204_NO_CONTENT:
+			self.content = b''
+			del self['Content-Type']
 
 	def set_cookie(self, key, value, **options):
 		"""
