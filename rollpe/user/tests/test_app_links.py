@@ -48,10 +48,13 @@ class RollpeInvitationPageTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, f'href="rollpe://rollpe/{self.code}"')
         self.assertContains(response, '로그인 후 참여 여부를 확인할 수 있습니다.')
+        self.assertContains(response, 'src="data:image/png;base64,')
+        self.assertContains(response, 'alt="롤페"')
         self.assertEqual(response['Cache-Control'], 'no-store')
         self.assertEqual(response['Referrer-Policy'], 'no-referrer')
         self.assertEqual(response['X-Frame-Options'], 'DENY')
         self.assertIn("default-src 'none'", response['Content-Security-Policy'])
+        self.assertIn('img-src data:', response['Content-Security-Policy'])
         self.assertNotContains(response, '<script')
 
     def test_links_ignore_queries_and_never_embed_arbitrary_return_targets(self):

@@ -4,16 +4,25 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
-<title>롤페 초대 · Roll-pe</title>
+<title>롤페 초대</title>
 <style nonce="{{ csp_nonce }}">
-*{box-sizing:border-box}body{margin:0;background:#fff;color:#181818;font-family:"Apple SD Gothic Neo",sans-serif;line-height:1.7;word-break:keep-all;overflow-wrap:break-word}main{max-width:420px;margin:80px auto;padding:24px}.brand{font-size:24px;font-weight:800;color:#FF5656}h1{font-size:28px;margin:28px 0 16px}p{color:#555}.button{display:block;margin-top:32px;padding:14px;border-radius:8px;background:#FF5656;color:#fff;text-align:center;text-decoration:none;font-weight:700}.button:active{opacity:.7}.button:focus-visible{outline:3px solid #181818;outline-offset:4px}small{display:block;margin-top:24px;color:#555}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;background:#fff;color:#181818;font-family:"Apple SD Gothic Neo",sans-serif;line-height:1.7;word-break:keep-all;overflow-wrap:break-word}
+main{width:100%;max-width:420px;padding:24px;text-align:center}
+.brand{display:block;width:160px;max-width:100%;height:auto;margin:0 auto}
+h1{font-size:28px;margin:28px 0 16px}
+p{color:#555}
+.button{display:block;margin-top:32px;padding:14px;border-radius:8px;background:#FF5656;color:#fff;text-align:center;text-decoration:none;font-weight:700}
+.button:active{opacity:.7}
+.button:focus-visible{outline:3px solid #181818;outline-offset:4px}
+small{display:block;margin-top:24px;color:#555}
 </style>
 </head>
 <body><main>
-<div class="brand">Roll-pe</div>
+<img class="brand" src="data:image/png;base64,{{ logo_data }}" alt="롤페" width="504" height="252">
 <h1>롤페에 초대받으셨나요?</h1>
 <p>앱에서 초대 링크를 열어주세요.<br>로그인 후 참여 여부를 확인할 수 있습니다.</p>
-<a class="button" href="{{ app_url }}">Roll-pe 앱 열기</a>
+<a class="button" href="{{ app_url }}">롤페 앱 열기</a>
 <small>앱이 설치되어 있지 않다면, 설치한 뒤 받은 초대 링크를 다시 눌러주세요.</small>
 </main></body>
 </html>
