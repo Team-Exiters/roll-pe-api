@@ -157,11 +157,15 @@ Google·카카오의 서버 콜백 기본 주소와 HTTPS CSRF 허용 주소도 
 
 ## 검증된 앱 링크 배포
 
-iOS는 `42NW282TDP.dev.hugesilver.Roll-Pe`와 `/api/user/password-reset/*`만 AASA에 등록합니다. Apple Developer에서 해당 App ID의 Associated Domains 기능을 활성화하고 새 네이티브 빌드를 설치해야 합니다. Android는 패키지 `dev.hugesilver.RollPe`의 **실제 설치 앱 서명 인증서 SHA-256**이 필요합니다. EAS 빌드 인증서 또는 Play App Signing을 사용하는 경우 Play의 앱 서명 인증서와 일치시킵니다. 업로드 키와 혼동하지 않습니다.
+iOS는 `42NW282TDP.dev.hugesilver.Roll-Pe`와 `/api/user/password-reset/*`·`/rollpe/*`를 AASA에 등록합니다. Apple Developer에서 해당 App ID의 Associated Domains 기능을 활성화하고 새 네이티브 빌드를 설치해야 합니다. Android는 패키지 `dev.hugesilver.RollPe`의 **실제 설치 앱 서명 인증서 SHA-256**이 필요합니다. EAS 빌드 인증서 또는 Play App Signing을 사용하는 경우 Play의 앱 서명 인증서와 일치시킵니다. 업로드 키와 혼동하지 않습니다.
+
+초대 링크는 `https://api.example.com/rollpe/<UUID>` 형식입니다. RN은 `EXPO_PUBLIC_WEB_URL`에 배포된 HTTPS 웹 주소가 있으면 우선 사용하고, 없으면 `EXPO_PUBLIC_API_URL`을 사용합니다. 별도 웹 배포 없이 API 서버의 같은 경로에서 앱 열기 안내를 제공합니다. 안내 페이지는 DB·인증·외부 서비스에 접근하지 않고 제목·작성자·마음을 표시하지 않으며, 조회만으로 초대 수락이나 참가를 실행하지 않습니다. 앱에서는 기존 로그인 및 참가 확인을 거칩니다. 앱 미설치 시 설치 후 원래 링크를 다시 열어야 하며 설치 과정에서 초대를 자동 복원하지 않습니다.
+
+RN은 API 도메인의 재설정·초대 경로와, 별도 웹 도메인이 설정된 경우 그 도메인의 초대 경로를 앱 링크로 등록합니다. 웹 도메인을 따로 쓰면 그 **웹 도메인**의 `/.well-known/`에도 동일한 앱 연결 메타데이터를 제공해야 합니다. API 도메인에만 등록한 것으로 별도 웹 도메인이 검증되지는 않습니다.
 
 서버 `ANDROID_APP_LINKS_SHA256_FINGERPRINTS`에는 `AA:BB:...` 형식의 32바이트 지문을 쉼표로 구분해 설정합니다. 미설정·잘못된 형식이면 `assetlinks.json`은 빈 배열을 반환하고 Android 자동 열기를 허용하지 않습니다. 브라우저 폼은 계속 사용할 수 있습니다. 로컬 생성 프로젝트의 debug 서명은 배포/EAS/Play 서명을 증명하지 않으므로 자동 등록하지 않았습니다.
 
-Nginx가 `/api`만 Django로 전달한다면 기존 API 설정을 유지하고 아래 정확한 경로 두 개도 같은 Django upstream으로 전달합니다. `http://127.0.0.1:8000`은 현재 API의 `proxy_pass` 대상이 다르면 그 값으로 맞춥니다.
+Nginx가 `/api`만 Django로 전달한다면 기존 API 설정을 유지하고 아래 메타데이터 두 경로와 초대 안내 경로도 같은 Django upstream으로 전달합니다. `http://127.0.0.1:8000`은 현재 API의 `proxy_pass` 대상이 다르면 그 값으로 맞춥니다. 별도 RN 웹 사이트가 `/rollpe/`를 제공하는 호스트에서는 그 웹 라우트를 유지합니다.
 
 ```nginx
 location = /.well-known/apple-app-site-association {
@@ -170,6 +174,11 @@ location = /.well-known/apple-app-site-association {
     proxy_set_header X-Forwarded-Proto $scheme;
 }
 location = /.well-known/assetlinks.json {
+    proxy_pass http://127.0.0.1:8000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+location ^~ /rollpe/ {
     proxy_pass http://127.0.0.1:8000;
     proxy_set_header Host $host;
     proxy_set_header X-Forwarded-Proto $scheme;
@@ -183,7 +192,7 @@ curl -i https://rollpe.mooo.com/.well-known/apple-app-site-association
 curl -i https://rollpe.mooo.com/.well-known/assetlinks.json
 ```
 
-앱 설치 후 메일에서 링크를 눌러 iOS·Android의 종료/실행 중 상태를 확인합니다. Apple CDN 캐시나 사용자 브라우저 선택에 따라 브라우저가 열릴 수 있으며, 같은 도메인 브라우저 내부 이동만으로 Universal Link 성공을 판단하지 않습니다. Expo Go로 검증하지 않습니다.
+앱 설정 변경이 있으므로 새 네이티브 빌드를 설치한 뒤 메일의 재설정 링크와 외부 메신저의 초대 링크를 눌러 iOS·Android의 종료/실행 중 상태를 확인합니다. 미로그인 초대는 로그인 후 원래 롤페로 돌아와 참가 여부를 확인하며, 이미 로그인한 경우 바로 참가 확인으로 이어집니다. 앱 미설치·연결 해제 상태에서는 브라우저 안내가 표시돼야 합니다. Apple CDN 캐시나 사용자 브라우저 선택에 따라 브라우저가 열릴 수 있으며, 같은 도메인 브라우저 내부 이동만으로 Universal Link 성공을 판단하지 않습니다. Expo Go로 검증하지 않습니다.
 
 기준: [Expo iOS Universal Links](https://docs.expo.dev/linking/ios-universal-links/), [Expo Android App Links](https://docs.expo.dev/linking/android-app-links/), [Apple Associated Domains](https://developer.apple.com/documentation/xcode/supporting-associated-domains), [Android 사이트 연결](https://developer.android.com/training/app-links/configure-assetlinks).
 
