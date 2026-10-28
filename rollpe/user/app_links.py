@@ -1,8 +1,6 @@
 """Public association metadata; no database or authentication dependencies."""
 import re
 import secrets
-from base64 import b64encode
-from pathlib import Path
 
 from django.conf import settings
 from django.http import JsonResponse
@@ -41,18 +39,15 @@ def android_asset_links(request):
 def rollpe_invitation_page(request, code):
     """Browser fallback only; opening a link never reads or joins a paper."""
     nonce = secrets.token_urlsafe(24)
-    # Keep the app logo available without a separate static-files deployment.
-    logo = Path(__file__).parent / 'assets' / 'rollpe-logo.png'
     response = render(request, 'rollpe_invitation.html', {
         'app_url': f'rollpe://rollpe/{code}', 'csp_nonce': nonce,
-        'logo_data': b64encode(logo.read_bytes()).decode('ascii'),
     })
     response['Cache-Control'] = 'no-store'
     response['Referrer-Policy'] = 'no-referrer'
     response['X-Frame-Options'] = 'DENY'
     response['X-Content-Type-Options'] = 'nosniff'
     response['Content-Security-Policy'] = (
-        f"default-src 'none'; img-src data:; style-src 'nonce-{nonce}'; "
+        f"default-src 'none'; script-src 'nonce-{nonce}'; style-src 'nonce-{nonce}'; "
         "frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
     )
     return response

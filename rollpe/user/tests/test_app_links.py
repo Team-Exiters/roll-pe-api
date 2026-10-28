@@ -1,3 +1,4 @@
+import re
 from unittest.mock import patch
 
 from django.test import SimpleTestCase, override_settings
@@ -46,20 +47,19 @@ class RollpeInvitationPageTests(SimpleTestCase):
         with patch('requests.sessions.Session.request', side_effect=AssertionError('network')):
             response = self.client.get(f'/rollpe/{self.code}')
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, f'href="rollpe://rollpe/{self.code}"')
-        self.assertContains(response, '로그인 후 참여 여부를 확인할 수 있습니다.')
-        self.assertContains(response, 'src="data:image/png;base64,')
-        self.assertContains(response, 'alt="롤페"')
+        self.assertContains(response, f'data-app-url="rollpe://rollpe/{self.code}"')
         self.assertEqual(response['Cache-Control'], 'no-store')
         self.assertEqual(response['Referrer-Policy'], 'no-referrer')
         self.assertEqual(response['X-Frame-Options'], 'DENY')
         self.assertIn("default-src 'none'", response['Content-Security-Policy'])
-        self.assertIn('img-src data:', response['Content-Security-Policy'])
-        self.assertNotContains(response, '<script')
+        nonce = re.search(r"script-src 'nonce-([^']+)'", response['Content-Security-Policy']).group(1)
+        self.assertContains(response, f'<script nonce="{nonce}">', count=1)
+        for element in ['<img', '<a ', '<h1', '<p>', '<form', '<iframe', '@font-face']:
+            self.assertNotContains(response, element)
 
     def test_links_ignore_queries_and_never_embed_arbitrary_return_targets(self):
         response = self.client.get(f'/rollpe/{self.code}?next=https://untrusted.example&title=private-title')
-        self.assertContains(response, f'href="rollpe://rollpe/{self.code}"')
+        self.assertContains(response, f'data-app-url="rollpe://rollpe/{self.code}"')
         self.assertNotContains(response, 'untrusted.example')
         self.assertNotContains(response, 'private-title')
 
@@ -67,7 +67,7 @@ class RollpeInvitationPageTests(SimpleTestCase):
         for code in [self.code, '00000000-0000-0000-0000-000000000000']:
             response = self.client.get(f'/rollpe/{code}')
             self.assertEqual(response.status_code, 200)
-            self.assertContains(response, '롤페에 초대받으셨나요?')
+            self.assertContains(response, 'background:#fff')
 
     def test_invalid_code_and_write_requests_are_rejected(self):
         for path in ['bad-code', '../home', self.code + '/content']:
