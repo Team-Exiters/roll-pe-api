@@ -1,3 +1,5 @@
+import re
+
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 from rest_framework_simplejwt.settings import api_settings
@@ -24,6 +26,7 @@ from user.password_reset import PasswordResetError, reset_password
 from user.models import User
 from user.apple_sessions import credential_for_token, revoke_apple_credentials
 from user.authentication import RollpeTokenRefreshSerializer
+from user.account import remove_account
 
 from paper.models import Paper
 
@@ -142,7 +145,7 @@ def drop_user_data(request):
         manual_unlink = revoke_apple_credentials(user) if user.provider == 'apple' else False
         for outstanding in OutstandingToken.objects.filter(user=user):
             BlacklistedToken.objects.get_or_create(token=outstanding)
-        user.delete()
+        remove_account(user)
 
     if manual_unlink:
         return Response(
@@ -231,7 +234,7 @@ class ForgotPasswordAPI(APIView):
             return Response(msg='이메일 인증을 진행해주세요.', status=400)
         provider = user_query.values_list('provider',flat=True).first()
         if provider is not None:
-            return Response(msg=f"{provider}로 회원가입된 이메일입니다. {provider}에서 비밀번호 찾기를 진행해주세요.", status=400)
+            return Response(msg='소셜 로그인 계정은 별도의 롤페 비밀번호를 사용하지 않습니다.', status=400)
         
         result = generate_send_email(email, path_code="password")
         if result.status_code != 200:
@@ -309,7 +312,7 @@ def search_user_name(request):
     if not user_name_code:
         return Response(msg="검색어가 필요합니다.", status=400)
 
-    users = User.objects.filter(Q(name__icontains=user_name_code) | Q(provider__icontains=user_name_code))
+    users = User.objects.filter(Q(name__icontains=user_name_code) | Q(provider__icontains=user_name_code), is_active=True)
     if not users:
         return Response(msg="사용자를 찾을 수 없습니다.",status=404)
     
@@ -357,11 +360,19 @@ def change_user_password(request):
         return Response(msg="토큰 무효화 중 오류가 발생했습니다.", status=400)
 
     with transaction.atomic():
-        user = User.objects.select_for_update().get(pk=request.user.pk)
+        user = User.objects.select_for_update().filter(pk=request.user.pk, is_active=True).first()
+        if user is None:
+            return Response(msg='로그인할 수 없는 계정입니다.', status=401)
+        if user.provider:
+            return Response(msg='소셜 로그인 계정은 별도의 롤페 비밀번호를 사용하지 않습니다.', status=403)
         credential = credential_for_token(user, token)
         if check_password(new_password, user.password):
             return Response(msg="현재 비밀번호와 새로운 비밀번호가 같습니다.", status=400)
-        token.blacklist()
+        if (new_password != new_password.strip()
+                or not re.fullmatch(r'(?=.*[a-zA-Z])(?=.*[!@#$%^*+=-])(?=.*[0-9]).{8,128}', new_password)):
+            return Response(msg='비밀번호는 8자 이상이며 영문, 숫자, 특수문자(!@#$%^*+=-)를 포함해야 합니다.', status=400)
+        for outstanding in OutstandingToken.objects.filter(user=user):
+            BlacklistedToken.objects.get_or_create(token=outstanding)
         if credential:
             credential.invalidated_at = timezone.now()
             credential.save(update_fields=['invalidated_at'])

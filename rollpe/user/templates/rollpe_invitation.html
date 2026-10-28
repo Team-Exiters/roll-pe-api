@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="light">
+<title>롤페 초대</title>
+<style nonce="{{ csp_nonce }}">
+html,body{margin:0;min-height:100%;background:#fff}
+</style>
+</head>
+<body data-app-url="{{ app_url }}">
+<script nonce="{{ csp_nonce }}">
+(() => {
+  const mobile = /Android|iPhone|iPad|iPod/.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (!mobile || document.visibilityState !== 'visible') return;
+  try {
+    window.location.replace(document.body.dataset.appUrl);
+  } catch {
+    // Some browsers require a user gesture; keep the requested blank white page.
+  }
+})();
+</script>
+</body>
+</html>

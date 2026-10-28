@@ -141,10 +141,14 @@ python manage.py cleanup_auth_flows --apply --limit 1000 --older-than-hours 24
 | 설정 | 필요한 경우 |
 | --- | --- |
 | `EMAIL_HOST_PASSWORD` | 회원가입 인증·재설정 메일 발송에 필수. 위 발신 계정에서 생성한 앱 비밀번호 |
-| `API_DOMAIN=rollpe.mooo.com` | 이메일 인증·재설정 링크의 API 호스트. 스킴 없이 지정 |
+| `API_DOMAIN` | 필수. 이메일 인증·재설정 링크의 실제 API 호스트를 스킴·경로 없이 지정. 미설정·잘못된 주소이면 시작 중단 |
+| `DJANGO_DEBUG=False` | 운영 서버에서는 디버그 비활성화. 미설정 시에도 `False`이며 문자열을 불리언으로 변환 |
+| `DJANGO_ALLOWED_HOSTS` | 선택. 쉼표로 구분한 요청 허용 호스트. 미설정 시 API 호스트와 로컬 프록시용 루프백 호스트를 허용하며 `*`는 거부 |
 | `ANDROID_APP_LINKS_SHA256_FINGERPRINTS` | Android 앱 자동 열기를 사용할 때 실제 설치 앱의 서명 SHA-256 등록. 미설정이어도 브라우저 재설정 가능 |
 
 현재 발신 주소·SMTP 호스트·포트는 코드 설정이므로 별도 `EMAIL_USER`·`EMAIL_PASSWORD` 환경변수는 사용하지 않습니다. `BASE_DOMAIN`도 새 재설정 메일에는 사용하지 않습니다. 메일 발송과 실제 기기에서의 앱 자동 열기는 배포 후 별도로 확인합니다.
+
+Google·카카오의 서버 콜백 기본 주소와 HTTPS CSRF 허용 주소도 `API_DOMAIN`을 사용합니다. 별도로 등록한 `GOOGLE_AUTH_REDIRECT_URI`·`KAKAO_AUTH_REDIRECT_URI`는 유지합니다. 운영 CSRF 허용 주소에서 예전 도메인을 제거했으며 로컬 개발용 주소는 `DJANGO_DEBUG=True`일 때만 추가합니다. 설정을 바꾼 뒤에는 Gunicorn을 리로드합니다.
 
 ## 요청 처리 변경
 
@@ -153,11 +157,15 @@ python manage.py cleanup_auth_flows --apply --limit 1000 --older-than-hours 24
 
 ## 검증된 앱 링크 배포
 
-iOS는 `42NW282TDP.dev.hugesilver.Roll-Pe`와 `/api/user/password-reset/*`만 AASA에 등록합니다. Apple Developer에서 해당 App ID의 Associated Domains 기능을 활성화하고 새 네이티브 빌드를 설치해야 합니다. Android는 패키지 `dev.hugesilver.RollPe`의 **실제 설치 앱 서명 인증서 SHA-256**이 필요합니다. EAS 빌드 인증서 또는 Play App Signing을 사용하는 경우 Play의 앱 서명 인증서와 일치시킵니다. 업로드 키와 혼동하지 않습니다.
+iOS는 `42NW282TDP.dev.hugesilver.Roll-Pe`와 `/api/user/password-reset/*`·`/rollpe/*`를 AASA에 등록합니다. Apple Developer에서 해당 App ID의 Associated Domains 기능을 활성화하고 새 네이티브 빌드를 설치해야 합니다. Android는 패키지 `dev.hugesilver.RollPe`의 **실제 설치 앱 서명 인증서 SHA-256**이 필요합니다. EAS 빌드 인증서 또는 Play App Signing을 사용하는 경우 Play의 앱 서명 인증서와 일치시킵니다. 업로드 키와 혼동하지 않습니다.
+
+초대 링크는 `https://api.example.com/rollpe/<UUID>` 형식입니다. RN은 `EXPO_PUBLIC_WEB_URL`에 배포된 HTTPS 웹 주소가 있으면 우선 사용하고, 없으면 `EXPO_PUBLIC_API_URL`을 사용합니다. 별도 웹 배포 없이 API 서버의 같은 경로를 사용할 수 있습니다. 검증된 앱 링크는 OS가 앱으로 직접 전달합니다. 브라우저로 열린 경우에는 흰 화면에서 iOS·Android 앱 열기를 한 번 시도하며, 로고·문구·버튼은 표시하지 않습니다. 브라우저가 자동 실행을 차단하거나 앱이 미설치된 경우 흰 화면에 남을 수 있습니다. 데스크톱·백그라운드 문서에서는 앱을 자동 실행하지 않고, 반복 실행이나 설치 여부 추적도 하지 않습니다. 페이지는 DB·인증·외부 서비스에 접근하지 않으며, 조회만으로 초대 수락이나 참가를 실행하지 않습니다. 앱에서는 기존 로그인 및 참가 확인을 거칩니다. 앱 미설치 시 설치 후 원래 링크를 다시 열어야 하며 설치 과정에서 초대를 자동 복원하지 않습니다.
+
+RN은 API 도메인의 재설정·초대 경로와, 별도 웹 도메인이 설정된 경우 그 도메인의 초대 경로를 앱 링크로 등록합니다. 웹 도메인을 따로 쓰면 그 **웹 도메인**의 `/.well-known/`에도 동일한 앱 연결 메타데이터를 제공해야 합니다. API 도메인에만 등록한 것으로 별도 웹 도메인이 검증되지는 않습니다.
 
 서버 `ANDROID_APP_LINKS_SHA256_FINGERPRINTS`에는 `AA:BB:...` 형식의 32바이트 지문을 쉼표로 구분해 설정합니다. 미설정·잘못된 형식이면 `assetlinks.json`은 빈 배열을 반환하고 Android 자동 열기를 허용하지 않습니다. 브라우저 폼은 계속 사용할 수 있습니다. 로컬 생성 프로젝트의 debug 서명은 배포/EAS/Play 서명을 증명하지 않으므로 자동 등록하지 않았습니다.
 
-Nginx가 `/api`만 Django로 전달한다면 기존 API 설정을 유지하고 아래 정확한 경로 두 개도 같은 Django upstream으로 전달합니다. `http://127.0.0.1:8000`은 현재 API의 `proxy_pass` 대상이 다르면 그 값으로 맞춥니다.
+Nginx가 `/api`만 Django로 전달한다면 기존 API 설정을 유지하고 아래 메타데이터 두 경로와 초대 안내 경로도 같은 Django upstream으로 전달합니다. `http://127.0.0.1:8000`은 현재 API의 `proxy_pass` 대상이 다르면 그 값으로 맞춥니다. 별도 RN 웹 사이트가 `/rollpe/`를 제공하는 호스트에서는 그 웹 라우트를 유지합니다.
 
 ```nginx
 location = /.well-known/apple-app-site-association {
@@ -166,6 +174,11 @@ location = /.well-known/apple-app-site-association {
     proxy_set_header X-Forwarded-Proto $scheme;
 }
 location = /.well-known/assetlinks.json {
+    proxy_pass http://127.0.0.1:8000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+location ^~ /rollpe/ {
     proxy_pass http://127.0.0.1:8000;
     proxy_set_header Host $host;
     proxy_set_header X-Forwarded-Proto $scheme;
@@ -179,6 +192,16 @@ curl -i https://rollpe.mooo.com/.well-known/apple-app-site-association
 curl -i https://rollpe.mooo.com/.well-known/assetlinks.json
 ```
 
-앱 설치 후 메일에서 링크를 눌러 iOS·Android의 종료/실행 중 상태를 확인합니다. Apple CDN 캐시나 사용자 브라우저 선택에 따라 브라우저가 열릴 수 있으며, 같은 도메인 브라우저 내부 이동만으로 Universal Link 성공을 판단하지 않습니다. Expo Go로 검증하지 않습니다.
+앱 설정 변경이 있으므로 새 네이티브 빌드를 설치한 뒤 메일의 재설정 링크와 외부 메신저의 초대 링크를 눌러 iOS·Android의 종료/실행 중 상태를 확인합니다. 미로그인 초대는 로그인 후 원래 롤페로 돌아와 참가 여부를 확인하며, 이미 로그인한 경우 바로 참가 확인으로 이어집니다. 초대 링크가 브라우저로 열리면 흰 배경이어야 하며, 자동 실행이 차단되더라도 반복 실행되지 않아야 합니다. Apple CDN 캐시나 사용자 브라우저 선택에 따라 브라우저가 열릴 수 있으며, 같은 도메인 브라우저 내부 이동만으로 Universal Link 성공을 판단하지 않습니다. Expo Go로 검증하지 않습니다.
 
 기준: [Expo iOS Universal Links](https://docs.expo.dev/linking/ios-universal-links/), [Expo Android App Links](https://docs.expo.dev/linking/android-app-links/), [Apple Associated Domains](https://developer.apple.com/documentation/xcode/supporting-associated-domains), [Android 사이트 연결](https://developer.android.com/training/app-links/configure-assetlinks).
+
+## 참여자 관리와 마음 수정 이력
+
+- `/api/paper/participants`: 방장 전용 GET(목록), POST(`pcode`, `userId`로 초대), DELETE(강퇴). 초대된 사용자는 비공개 롤페도 비밀번호 없이 조회할 수 있습니다. 방장과 지정 수신자는 강퇴할 수 없습니다.
+- `/api/paper/leave`: POST(`pcode`)로 본인만 나갑니다. 방장은 나갈 수 없습니다. 나가기·강퇴는 해당 롤페의 본인 마음과 수정 이력을 함께 삭제합니다. 나가기는 재입장을 허용하지만 강퇴는 링크 입장·재초대를 차단합니다.
+- 전달 완료 또는 전달일 오전 10시(KST) 이후에는 초대·강퇴·나가기를 막아 완성본을 유지합니다. 참여자 변경과 마음 변경은 동일한 롤페 행을 잠그는 트랜잭션으로 처리합니다.
+- `/api/heart/revisions?hcode=...`: 해당 마음의 작성자와 방장만 조회할 수 있습니다. 각 기록에는 `number`(원본 0, 이후 1..N), `content`, `color`, `editor`, `recordedAt`, `baseline`이 있습니다. 내용 또는 색상이 실제로 바뀔 때만 새 기록을 추가합니다. 일반 마음 응답에는 `revisionCount`만 추가되며, 이전 본문은 포함하지 않습니다.
+- 기존 마음은 마이그레이션 적용 시점의 내용을 `baseline=true`인 기준본으로 저장합니다. 이미 덮어쓴 과거 원본은 복원할 수 없습니다. Django 관리자에서 마음별 이력을 읽기 전용으로 확인할 수 있습니다.
+- 공개 카드 목록에서는 마음 본문과 참여자 명단을 반환하지 않습니다. 상세 조회와 이력 조회의 접근 검사를 목록으로 우회할 수 없도록 합니다.
+- 서버 배포 시 `python manage.py migrate`로 `paper.0005_participants_and_heart_history`, `heart.0004_participants_and_heart_history`를 적용한 뒤 Gunicorn을 다시 로드합니다. 새 환경변수나 외부 서비스 설정은 필요하지 않습니다.

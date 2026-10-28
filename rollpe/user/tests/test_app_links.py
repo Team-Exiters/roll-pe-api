@@ -1,3 +1,4 @@
+import re
 from unittest.mock import patch
 
 from django.test import SimpleTestCase, override_settings
@@ -11,7 +12,7 @@ class AppLinkMetadataTests(SimpleTestCase):
         self.assertEqual(response['Content-Type'], 'application/json')
         self.assertEqual(response.json()['applinks']['details'], [{
             'appID': '42NW282TDP.dev.hugesilver.Roll-Pe',
-            'paths': ['/api/user/password-reset/*'],
+            'paths': ['/api/user/password-reset/*', '/rollpe/*'],
         }])
 
     @override_settings(ANDROID_APP_LINKS_SHA256_FINGERPRINTS=[])
@@ -36,3 +37,40 @@ class AppLinkMetadataTests(SimpleTestCase):
         for url in ['/.well-known/assetlinks.json', '/.well-known/apple-app-site-association']:
             self.assertEqual(self.client.post(url).status_code, 405)
             self.assertEqual(self.client.head(url).status_code, 200)
+
+
+class RollpeInvitationPageTests(SimpleTestCase):
+    code = '12345678-1234-4234-8234-123456789abc'
+
+    def test_link_preview_has_no_database_provider_or_participation_side_effects(self):
+        # SimpleTestCase also forbids database access, including authentication.
+        with patch('requests.sessions.Session.request', side_effect=AssertionError('network')):
+            response = self.client.get(f'/rollpe/{self.code}')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, f'data-app-url="rollpe://rollpe/{self.code}"')
+        self.assertEqual(response['Cache-Control'], 'no-store')
+        self.assertEqual(response['Referrer-Policy'], 'no-referrer')
+        self.assertEqual(response['X-Frame-Options'], 'DENY')
+        self.assertIn("default-src 'none'", response['Content-Security-Policy'])
+        nonce = re.search(r"script-src 'nonce-([^']+)'", response['Content-Security-Policy']).group(1)
+        self.assertContains(response, f'<script nonce="{nonce}">', count=1)
+        for element in ['<img', '<a ', '<h1', '<p>', '<form', '<iframe', '@font-face']:
+            self.assertNotContains(response, element)
+
+    def test_links_ignore_queries_and_never_embed_arbitrary_return_targets(self):
+        response = self.client.get(f'/rollpe/{self.code}?next=https://untrusted.example&title=private-title')
+        self.assertContains(response, f'data-app-url="rollpe://rollpe/{self.code}"')
+        self.assertNotContains(response, 'untrusted.example')
+        self.assertNotContains(response, 'private-title')
+
+    def test_unavailable_and_private_codes_have_the_same_generic_page(self):
+        for code in [self.code, '00000000-0000-0000-0000-000000000000']:
+            response = self.client.get(f'/rollpe/{code}')
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(response, 'background:#fff')
+
+    def test_invalid_code_and_write_requests_are_rejected(self):
+        for path in ['bad-code', '../home', self.code + '/content']:
+            self.assertEqual(self.client.get(f'/rollpe/{path}').status_code, 404)
+        self.assertEqual(self.client.post(f'/rollpe/{self.code}').status_code, 405)
+        self.assertEqual(self.client.head(f'/rollpe/{self.code}').status_code, 200)

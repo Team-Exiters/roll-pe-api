@@ -18,11 +18,12 @@ from django.contrib import admin
 from django.urls import path, include
 
 from paper.apis import QueryIndexAPI
-from user.app_links import apple_app_site_association, android_asset_links
+from user.app_links import apple_app_site_association, android_asset_links, rollpe_invitation_page
 
 urlpatterns = [
     path('.well-known/apple-app-site-association', apple_app_site_association),
     path('.well-known/assetlinks.json', android_asset_links),
+    path('rollpe/<uuid:code>', rollpe_invitation_page, name='rollpe_invitation'),
     path('admin', admin.site.urls),
     path('api/paper', include('paper.urls')),
     path('api/heart', include('heart.urls')),

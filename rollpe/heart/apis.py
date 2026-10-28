@@ -1,186 +1,151 @@
-from rest_framework.views import APIView
+from django.db import transaction
+from django.db.models import Q
 from rest_framework.decorators import api_view
 from rest_framework.pagination import PageNumberPagination
-from django.utils.timezone import localtime, now, make_aware
-from datetime import datetime, time, timedelta
+from rest_framework.views import APIView
 
-from utils.response import Response
-from utils.share.functions import is_only_invited_user, is_valid_uuid, is_host
-from paper.models import Paper
 from heart.models import Heart
 from heart.serializers import HeartReadSerializer, HeartWriteSerializer
+from paper.models import Paper, QueryIndexTable
+from paper.lifecycle import delivered_paper_filter, is_delivered
+from paper.capacity import capacity_error
+from utils.response import Response
+from utils.share.functions import is_invited_user, is_valid_uuid, is_host, is_blocked_user
+
+
+def can_read(paper, user):
+    if is_blocked_user(user, paper):
+        return False
+    if is_delivered(paper):
+        return paper.receiverFK_id == user.pk
+    return paper.viewStat or is_invited_user(user, paper)
+
+
+def mutation_error(paper, user, data=None):
+    if is_blocked_user(user, paper):
+        return Response(status=403, msg='이 롤페에 다시 참여할 수 없습니다.')
+    if not paper.viewStat and not is_invited_user(user, paper):
+        return Response(status=471)
+    if is_delivered(paper):
+        return Response(status=483, msg='롤페가 종료되어 마음을 변경할 수 없습니다.')
+    if data is not None:
+        maximum = paper.sizeFK.query.get('max', 12)
+        if not isinstance(maximum, int) or isinstance(maximum, bool) or maximum <= 0:
+            maximum = 12
+        if data['location'] >= maximum:
+            return Response(status=480)
+    return None
+
+
+def selected_color(paper, name):
+    palette = 'MONOCOLOR' if paper.themeFK.name == '추모' else 'COLOR'
+    return QueryIndexTable.objects.filter(type=palette, name__iexact=name.lstrip('#')).order_by('id').first()
 
 
 class HeartAPI(APIView):
     pagination_class = PageNumberPagination
+
     def get(self, request):
-        # 로그인 여부 검증
         if not request.user.is_authenticated:
             return Response(status=401)
-        
-        pcode = request.GET.get('pcode')
         hcode = request.GET.get('hcode')
-        
+        pcode = request.GET.get('pcode')
+        if not is_valid_uuid(hcode or pcode):
+            return Response(status=404)
         if hcode:
-            # 상세정보 가져오기
-            if not is_valid_uuid(hcode):
+            heart = Heart.objects.select_related('paperFK').filter(code=hcode).first()
+            if heart is None:
                 return Response(status=404)
-            
-            try:
-                heart_instance = Heart.objects.get(code=hcode)
-            except Heart.DoesNotExist:
-                return Response(status=404)
-            
-            paper_instance = heart_instance.paperFK
-            
-            is_public = paper_instance.viewStat
-            
-            if not is_public and not is_only_invited_user(request.user, paper_instance):
+            if not can_read(heart.paperFK, request.user):
                 return Response(status=471)
-            
-            serializer = HeartReadSerializer(heart_instance)
-            
-            return Response(
-                data=serializer.data,
-                status=200
-            )
-        else:
-            # 목록 가져오기
-            if not (pcode and is_valid_uuid(pcode)):
-                return Response(status=404)
-            
-            try:
-                paper_instance = Paper.objects.get(code=pcode)
-            except Paper.DoesNotExist:
-                return Response(status=404)
-            
-            is_public = paper_instance.viewStat
-            
-            # 비공개 롤링페이퍼일 경우 초대된 유저인지 검증
-            if not is_public and not is_only_invited_user(request.user, paper_instance):
-                return Response(status=471)
-            
-            heart_instance_list = Heart.objects.filter(paperFK__code=pcode).order_by('createdAt')
-            
-            my_heart = heart_instance_list.filter(userFK=request.user.id).first()
-            my_pk = my_heart.id if my_heart else 0
-            
-            paginator = self.pagination_class()
-            page = paginator.paginate_queryset(heart_instance_list, request)
-            serializer = HeartReadSerializer(
-                page, 
-                is_public=is_public,
-                my_pk=my_pk,
-                many=True,
-            )
-            return Response(
-                data=paginator.get_paginated_response(serializer.data).data,
-                status=200
-            )
-            
-    
+            return Response(data=HeartReadSerializer(heart).data, status=200)
+        paper = Paper.objects.filter(code=pcode).first()
+        if paper is None:
+            return Response(status=404)
+        if not can_read(paper, request.user):
+            return Response(status=471)
+        hearts = Heart.objects.filter(paperFK=paper).order_by('createdAt')
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(hearts, request)
+        return Response(data=paginator.get_paginated_response(HeartReadSerializer(page, many=True).data).data, status=200)
+
     def post(self, request):
-        # 로그인 여부 검증
         if not request.user.is_authenticated:
             return Response(status=401)
-        
-        # serialzier 검증
-        serializer = HeartWriteSerializer(data=request.data, method='post')
+        serializer = HeartWriteSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(data=serializer.errors, status=480)
-        
-        validated_data = serializer.validated_data
-        
-        # 존재하는 Paper인지 검증
-        try:
-            paper_instance = Paper.objects.get(pk=validated_data['paperFK'])
-        except Paper.DoesNotExist:
-            return Response(status=404)
-        
-        # 중복 작성 검증
-        if Heart.objects.filter(userFK=request.user.id, paperFK=paper_instance.id).exists():
-            return Response(status=482)
-        
-        # 중복 index 검증
-        if Heart.objects.filter(location=validated_data['location'], paperFK=paper_instance.id).exists():
-            return Response(status=485)
-        
-        # 비공개 롤링페이퍼일 경우만 검증
-        if not paper_instance.viewStat and not is_only_invited_user(request.user, paper_instance):
-            return Response(status=471)
-        
-        validated_data['userFK'] = request.user.id
-        heart_instance = serializer.create(validated_data)
-        read_serializer = HeartReadSerializer(Heart.objects.get(pk=heart_instance.id))
-        
-        return Response(
-            data=read_serializer.data,
-            status=201
-        )
-    
-    
+        data = serializer.validated_data
+        # Every mutation locks the parent first, serializing writes without altering historical data.
+        with transaction.atomic():
+            paper = Paper.objects.select_for_update().filter(pk=data['paperFK']).first()
+            if paper is None:
+                return Response(status=404)
+            error = mutation_error(paper, request.user, data)
+            if error is not None:
+                return error
+            if Heart.objects.filter(userFK=request.user, paperFK=paper).exists():
+                return Response(status=482)
+            error = capacity_error(paper, request.user)
+            if error is not None:
+                return error
+            if Heart.objects.filter(location=data['location'], paperFK=paper).exists():
+                return Response(status=485)
+            color = selected_color(paper, data['color'])
+            if color is None:
+                return Response(status=480)
+            heart = serializer.save(userFK=request.user, paperFK=paper, colorFK=color)
+            return Response(data=HeartReadSerializer(heart).data, status=201)
+
     def patch(self, request):
-        # 로그인 여부 검증
         if not request.user.is_authenticated:
             return Response(status=401)
-
         serializer = HeartWriteSerializer(data=request.data, method='patch')
         if not serializer.is_valid():
             return Response(data=serializer.errors, status=480)
-        
-        heart_id = serializer.validated_data['heartPK']
-        
-        # 객체 존재 여부 검증
-        try:
-            heart_instance = Heart.objects.get(pk=heart_id)
-        except Heart.DoesNotExist:
-            return Response(status=404)
-        
-        # 작성자 검증
-        if not heart_instance.userFK == request.user:
-            return Response(status=481)
-        
-        # 수정 가능 유효 시간 검증
-        datetime_value = make_aware(datetime.combine(heart_instance.paperFK.receivingDate, time.min))
-        deadline = datetime_value - timedelta(days=1, seconds=1)
-        current_time = localtime(now())
-        
-        if deadline < current_time:
-            return Response(status=483)
-        
-        serializer.update(validated_data=serializer.validated_data)
-        
-        read_serializer = HeartReadSerializer(Heart.objects.get(pk=heart_id))
-            
-        return Response(
-            data=read_serializer.data,
-            status=200
-        )
-    
+        data = serializer.validated_data
+        with transaction.atomic():
+            paper = Paper.objects.select_for_update().filter(pk=data['paperFK']).first()
+            if paper is None:
+                return Response(status=404)
+            heart = Heart.objects.filter(pk=data['heartPK']).first()
+            if heart is None:
+                return Response(status=404)
+            if heart.userFK_id != request.user.pk:
+                return Response(status=481)
+            if heart.paperFK_id != paper.pk or heart.location != data['location']:
+                return Response(status=480)
+            error = mutation_error(paper, request.user, data)
+            if error is not None:
+                return error
+            color = selected_color(paper, data['color'])
+            if color is None:
+                return Response(status=480)
+            heart = serializer.update(heart, {**data, 'colorFK': color})
+            return Response(data=HeartReadSerializer(heart).data, status=200)
+
     def delete(self, request):
-        
         if not request.user.is_authenticated:
             return Response(status=401)
-        
         hcode = request.GET.get('hcode')
-        
         if not is_valid_uuid(hcode):
             return Response(status=404)
-        
-        try:
-            heart_instance = Heart.objects.get(code=hcode)
-        except Heart.DoesNotExist:
-            return Response(status=404)
-        
-        # 작성자 검증
-        if not heart_instance.userFK == request.user:
-            if not is_host(request.user, heart_instance.paperFK):
+        with transaction.atomic():
+            target = Heart.objects.filter(code=hcode).values('paperFK_id').first()
+            if target is None:
+                return Response(status=404)
+            paper = Paper.objects.select_for_update().filter(pk=target['paperFK_id']).first()
+            heart = Heart.objects.filter(code=hcode).first()
+            if paper is None or heart is None:
+                return Response(status=404)
+            if heart.userFK_id != request.user.pk and not is_host(request.user, paper):
                 return Response(status=470)
-        
-        heart_instance.delete()
-        
-        return Response(status=204)
-    
+            error = mutation_error(paper, request.user)
+            if error is not None:
+                return error
+            heart.delete()
+            return Response(status=204)
+
 
 @api_view(['GET'])
 def get_my_heart_list(request):
@@ -188,7 +153,10 @@ def get_my_heart_list(request):
     if not request.user.is_authenticated:
             return Response(status=401)
 
-    heart_instance_list = Heart.objects.filter(userFK=request.user).order_by('-createdAt')
+    # Authorship does not retain access to a paper after it has been delivered.
+    heart_instance_list = (Heart.objects.filter(userFK=request.user)
+                           .filter(Q(paperFK__receiverFK=request.user) | ~delivered_paper_filter('paperFK__'))
+                           .exclude(paperFK__blockedUsers=request.user).order_by('-createdAt', '-pk'))
     
     pagination_class = PageNumberPagination
     paginator = pagination_class()

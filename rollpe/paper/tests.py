@@ -43,7 +43,7 @@ class UserPaperAPITest(APITestCase):
 		self.assertEqual(response_data['data']['title'], data['title'])
 
 	def test_delete_paper(self):
-		paper = baker.make(Paper, hostFK=self.user)
+		paper = baker.make(Paper, hostFK=self.user, receivingDate='2099-01-01', receivingStat=0)
 		url = reverse('paper_api_for_user')
 		response = self.client.delete(url, data={'pcode': str(paper.code)}, format='json')
 		self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
@@ -55,7 +55,7 @@ class PaperAPITest(APITestCase):
 	def setUp(self):
 		self.user = baker.make(get_user_model())
 		self.client.force_authenticate(user=self.user)
-		self.paper = baker.make(Paper, hostFK=self.user)
+		self.paper = baker.make(Paper, hostFK=self.user, receivingDate='2099-01-01', receivingStat=0)
 
 	def test_get_paper_detail(self):
 		url = reverse('paper_api') + f'?pcode={self.paper.code}'
@@ -88,13 +88,13 @@ class PaperEnterManageAPITest(APITestCase):
 		self.client.force_authenticate(user=self.user)
 
 	def test_enter_manage_with_valid_password(self):
-		paper = baker.make(Paper, hostFK=self.user, password='testpassword')
+		paper = baker.make(Paper, hostFK=self.user, password='testpassword', receivingDate='2099-01-01')
 		url = reverse('paper_invite_api')
 		response = self.client.post(url, {'pcode': str(paper.code), 'password': 'testpassword'}, format='json')
 		self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
 
 	def test_enter_manage_with_invalid_password(self):
-		paper = baker.make(Paper, hostFK=self.user, password='correctpassword', viewStat=False)
+		paper = baker.make(Paper, hostFK=self.user, password='correctpassword', viewStat=False, receivingDate='2099-01-01')
 		url = reverse('paper_invite_api')
 		response = self.client.post(url, {'pcode': str(paper.code), 'password': 'wrongpassword'}, format='json')
 		self.assertEqual(response.status_code, 472)
