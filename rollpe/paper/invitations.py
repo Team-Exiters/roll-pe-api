@@ -8,6 +8,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.views import APIView
 
 from paper.lifecycle import delivered_paper_filter, is_delivered
+from paper.capacity import capacity_error
 from paper.models import Paper, PaperInvitation
 from utils.response import Response
 from utils.share.functions import is_blocked_user
@@ -29,6 +30,9 @@ def invite_user(paper, user):
 
 def accept_invitation(invitation):
     """Caller holds the paper lock, shared by membership, delivery and deletion."""
+    error = capacity_error(invitation.paper, invitation.user)
+    if error is not None:
+        return error
     invitation.paper.invitingUser.add(invitation.user)
     invitation.status = PaperInvitation.Status.ACCEPTED
     invitation.respondedAt = timezone.now()
@@ -87,7 +91,9 @@ class PaperInvitationsAPI(APIView):
             if is_delivered(paper):
                 return Response(status=483)
             if desired == PaperInvitation.Status.ACCEPTED:
-                accept_invitation(invitation)
+                error = accept_invitation(invitation)
+                if error is not None:
+                    return error
             else:
                 invitation.status = desired
                 invitation.respondedAt = timezone.now()

@@ -8,6 +8,7 @@ from heart.models import Heart
 from heart.serializers import HeartReadSerializer, HeartWriteSerializer
 from paper.models import Paper, QueryIndexTable
 from paper.lifecycle import delivered_paper_filter, is_delivered
+from paper.capacity import capacity_error
 from utils.response import Response
 from utils.share.functions import is_invited_user, is_valid_uuid, is_host, is_blocked_user
 
@@ -85,6 +86,9 @@ class HeartAPI(APIView):
                 return error
             if Heart.objects.filter(userFK=request.user, paperFK=paper).exists():
                 return Response(status=482)
+            error = capacity_error(paper, request.user)
+            if error is not None:
+                return error
             if Heart.objects.filter(location=data['location'], paperFK=paper).exists():
                 return Response(status=485)
             color = selected_color(paper, data['color'])

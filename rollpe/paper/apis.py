@@ -10,6 +10,7 @@ from paper.serializer import UserShowPaperSerializer, PaperCreateSerializer, Pap
 	QueryIndexCreateSerializer
 from paper.lifecycle import delivered_paper_filter, is_delivered
 from paper.invitations import accept_invitation
+from paper.capacity import capacity_error
 from user.models import User
 from utils.response import Response
 from rest_framework.views import APIView
@@ -196,6 +197,10 @@ class PaperAPI(APIView):
 				)
 		else:
 			# Entry prompts need only visibility and availability, never private contents.
+			if not delivered:
+				error = capacity_error(paper, user)
+				if error is not None:
+					return error
 			invitation = PaperInvitation.objects.filter(paper=paper, user=user, status=PaperInvitation.Status.PENDING, paper__hostFK__is_active=True).first()
 			return Response(status=471, data={
 				'code': str(paper.code),
@@ -292,7 +297,9 @@ class PaperEnterManageAPI(APIView):
                 return Response(status=483)
             invitation = PaperInvitation.objects.filter(paper=paper, user=request.user, status=PaperInvitation.Status.PENDING, paper__hostFK__is_active=True).first()
             if invitation is not None:
-                accept_invitation(invitation)
+                error = accept_invitation(invitation)
+                if error is not None:
+                    return error
                 return Response(status=204)
             if not paper.viewStat:
                 password = request.data.get('password')
@@ -300,6 +307,9 @@ class PaperEnterManageAPI(APIView):
                     return Response(status=400)
                 if not check_password(password, paper.password):
                     return Response(status=472)
+            error = capacity_error(paper, request.user)
+            if error is not None:
+                return error
             paper.invitingUser.add(request.user)
             return Response(status=204)
 
