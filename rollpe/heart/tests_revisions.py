@@ -38,7 +38,7 @@ class HeartRevisionTests(APITestCase):
     def history(self, code):
         return self.client.get('/api/heart/revisions', {'hcode': str(code)})
 
-    def test_original_and_each_actual_edit_are_stored_in_order_with_color_and_actor(self):
+    def test_original_and_each_actual_edit_are_returned_newest_first_with_color_and_actor(self):
         self.assertEqual(self.write().status_code, 201)
         first = Heart.objects.get()
         self.assertEqual(first.revisionCount, 0)
@@ -47,8 +47,8 @@ class HeartRevisionTests(APITestCase):
         self.assertEqual(self.edit().json()['data']['revisionCount'], 1)
         self.assertEqual(self.edit(context='두 번째 수정').json()['data']['revisionCount'], 2)
         data = self.history(first.code).json()['data']['revisions']
-        self.assertEqual([r['number'] for r in data], [0, 1, 2])
-        self.assertEqual([r['content'] for r in data], ['원래 마음', '수정 마음', '두 번째 수정'])
+        self.assertEqual([r['number'] for r in data], [2, 1, 0])
+        self.assertEqual([r['content'] for r in data], ['두 번째 수정', '수정 마음', '원래 마음'])
         self.assertTrue(all(r['color'] == 'F2EB28' and r['editor']['id'] == self.writer.pk for r in data))
         self.assertFalse(data[0]['baseline'])
         self.assertTrue(all('recordedAt' in r for r in data))
