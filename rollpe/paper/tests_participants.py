@@ -78,14 +78,32 @@ class PaperParticipantsTests(PaperParticipantsFixture):
     def test_leave_deletes_own_memo_and_all_revisions_without_banning_reentry(self):
         self.assertEqual(self.write().status_code, 201)
         heart = Heart.objects.get()
-        self.assertTrue(HeartRevision.objects.filter(heartFK=heart).exists())
+        for content in ('첫 번째 수정', '두 번째 수정'):
+            response = self.client.patch('/api/heart', {
+                'paperFK': self.paper.pk, 'heartPK': heart.pk, 'context': content,
+                'location': 0, 'color': 'F2EB28',
+            }, format='json')
+            self.assertEqual(response.status_code, 200)
+        self.assertEqual(list(heart.revisions.values_list('content', flat=True)),
+                         ['원래 마음', '첫 번째 수정', '두 번째 수정'])
+        for user in (self.host, self.writer):
+            self.client.force_authenticate(user)
+            response = self.client.get('/api/heart/revisions', {'hcode': str(heart.code)})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(len(response.json()['data']['revisions']), 3)
         for _ in range(2):
             self.assertEqual(self.client.post('/api/paper/leave', {'pcode': str(self.paper.code)}, format='json').status_code, 204)
         self.assertFalse(Heart.objects.filter(pk=heart.pk).exists())
         self.assertFalse(HeartRevision.objects.exists())
         self.assertFalse(self.paper.invitingUser.filter(pk=self.writer.pk).exists())
         self.assertFalse(self.paper.blockedUsers.filter(pk=self.writer.pk).exists())
+        for user in (self.host, self.writer):
+            self.client.force_authenticate(user)
+            self.assertEqual(self.client.get('/api/heart/revisions', {'hcode': str(heart.code)}).status_code, 404)
         self.assertEqual(self.client.post('/api/paper/enter', {'pcode': str(self.paper.code), 'password': 'local-paper-test'}, format='json').status_code, 204)
+        self.assertTrue(self.paper.invitingUser.filter(pk=self.writer.pk).exists())
+        self.assertFalse(Heart.objects.filter(paperFK=self.paper, userFK=self.writer).exists())
+        self.assertFalse(HeartRevision.objects.exists())
 
     def test_kick_deletes_memo_and_history_and_blocks_all_reentry_and_reinvite(self):
         self.assertEqual(self.write().status_code, 201)

@@ -26,7 +26,7 @@ class HeartRevisionsAPI(APIView):
             'number': version.number, 'content': version.content, 'color': version.color,
             'recordedAt': version.recordedAt.isoformat(), 'baseline': version.baseline,
             'editor': UserViewSerializer(version.editorFK).data if version.editorFK_id else None,
-        } for version in heart.revisions.select_related('editorFK').all()]
+        } for version in heart.revisions.select_related('editorFK').order_by('-number')]
         if not revisions:
             revisions = [{'number': 0, 'content': heart.context, 'color': heart.colorFK.name,
                           'recordedAt': heart.updatedAt.isoformat(), 'baseline': True,

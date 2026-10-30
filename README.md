@@ -68,7 +68,7 @@ python manage.py migrate
 배포 전 준비:
 
 1. 서버의 기존 `rollpe/.env`에 `APPLE_AUTH_CLIENT_ID`와 `APPLE_AUTH_REDIRECT_URI`를 설정합니다. Services ID는 Apple Developer에 등록한 실제 값을 사용하며, Apple에 등록한 Return URL은 `https://rollpe.mooo.com/api/user/social/login/apple/callback`입니다.
-2. 서버의 기존 키를 사용해 `APPLE_AUTH_TEAM_ID`, `APPLE_AUTH_KEY_ID`, `APPLE_AUTH_PRIVATE_KEY_FILE`을 설정합니다. 네이티브 Client ID는 `APPLE_AUTH_NATIVE_CLIENT_ID=dev.hugesilver.Roll-Pe`로 설정합니다. 기존 `APP_APPLE_BUNDEL_ID`도 대체값으로 지원하며 새 이름이 우선합니다. Team ID는 앱과 연결된 실제 팀(`42NW282TDP`)인지 확인합니다. 키 파일은 저장소와 Expo 환경변수에 넣지 않습니다.
+2. 서버의 기존 키를 사용해 `APPLE_AUTH_TEAM_ID`, `APPLE_AUTH_KEY_ID`, `APPLE_AUTH_PRIVATE_KEY_FILE`을 설정합니다. 네이티브 Client ID는 `APPLE_AUTH_NATIVE_CLIENT_ID=dev.hugesilver.RollPe`로 설정합니다. 기존 `APP_APPLE_BUNDEL_ID`도 대체값으로 지원하며 새 이름이 우선합니다. iOS 앱 식별자는 Android와 통일한 새 App ID를 사용하므로 Apple Developer의 App ID·Sign in with Apple 연결과 서명 프로필도 같은 식별자로 구성합니다. Team ID는 앱과 연결된 실제 팀(`42NW282TDP`)인지 확인합니다. 키 파일은 저장소와 Expo 환경변수에 넣지 않습니다.
 3. `APPLE_AUTH_TOKEN_ENCRYPTION_KEYS`에 서버에서 생성한 Fernet 키를 설정합니다. Apple 토큰 응답을 DB에 암호화해 보관하는 용도이며, `.p8` 키와는 별개입니다. 쉼표로 여러 키를 지정하면 첫 번째 키로 암호화하고 나머지 키도 복호화에 사용합니다. 기존 토큰을 읽을 수 있도록 키를 백업하고 교체 시 이전 키도 유지합니다.
 4. `APPLE_AUTH_RETURN_URLS`에는 서버 검증 후 돌아갈 앱·웹 주소만 정확히 나열합니다. 로컬 웹은 `http://localhost:8081/auth/apple`, 네이티브 앱은 `rollpe://auth/apple`입니다. 실제 웹 도메인 배포 시 해당 도메인의 `/auth/apple`을 추가합니다.
 5. 코드와 설정을 서버에 반영한 뒤 `python manage.py migrate`로 `0004`·`0005` 마이그레이션을 적용하고 API를 재시작합니다. 기존 회원 데이터는 유지됩니다.
@@ -157,7 +157,7 @@ Google·카카오의 서버 콜백 기본 주소와 HTTPS CSRF 허용 주소도 
 
 ## 검증된 앱 링크 배포
 
-iOS는 `42NW282TDP.dev.hugesilver.Roll-Pe`와 `/api/user/password-reset/*`·`/rollpe/*`를 AASA에 등록합니다. Apple Developer에서 해당 App ID의 Associated Domains 기능을 활성화하고 새 네이티브 빌드를 설치해야 합니다. Android는 패키지 `dev.hugesilver.RollPe`의 **실제 설치 앱 서명 인증서 SHA-256**이 필요합니다. EAS 빌드 인증서 또는 Play App Signing을 사용하는 경우 Play의 앱 서명 인증서와 일치시킵니다. 업로드 키와 혼동하지 않습니다.
+iOS는 `42NW282TDP.dev.hugesilver.RollPe`와 `/api/user/password-reset/*`·`/rollpe/*`를 AASA에 등록합니다. Apple Developer에서 해당 App ID의 Associated Domains 기능을 활성화하고 새 네이티브 빌드를 설치해야 합니다. Android는 패키지 `dev.hugesilver.RollPe`의 **실제 설치 앱 서명 인증서 SHA-256**이 필요합니다. EAS 빌드 인증서 또는 Play App Signing을 사용하는 경우 Play의 앱 서명 인증서와 일치시킵니다. 업로드 키와 혼동하지 않습니다.
 
 초대 링크는 `https://api.example.com/rollpe/<UUID>` 형식입니다. RN은 `EXPO_PUBLIC_WEB_URL`에 배포된 HTTPS 웹 주소가 있으면 우선 사용하고, 없으면 `EXPO_PUBLIC_API_URL`을 사용합니다. 별도 웹 배포 없이 API 서버의 같은 경로를 사용할 수 있습니다. 검증된 앱 링크는 OS가 앱으로 직접 전달합니다. 브라우저로 열린 경우에는 흰 화면에서 iOS·Android 앱 열기를 한 번 시도하며, 로고·문구·버튼은 표시하지 않습니다. 브라우저가 자동 실행을 차단하거나 앱이 미설치된 경우 흰 화면에 남을 수 있습니다. 데스크톱·백그라운드 문서에서는 앱을 자동 실행하지 않고, 반복 실행이나 설치 여부 추적도 하지 않습니다. 페이지는 DB·인증·외부 서비스에 접근하지 않으며, 조회만으로 초대 수락이나 참가를 실행하지 않습니다. 앱에서는 기존 로그인 및 참가 확인을 거칩니다. 앱 미설치 시 설치 후 원래 링크를 다시 열어야 하며 설치 과정에서 초대를 자동 복원하지 않습니다.
 

@@ -13,7 +13,7 @@ FINGERPRINT = re.compile(r'(?:[0-9A-Fa-f]{2}:){31}[0-9A-Fa-f]{2}\Z')
 @require_safe
 def apple_app_site_association(request):
     return JsonResponse({'applinks': {'apps': [], 'details': [{
-        'appID': '42NW282TDP.dev.hugesilver.Roll-Pe',
+        'appID': '42NW282TDP.dev.hugesilver.RollPe',
         'paths': ['/api/user/password-reset/*', '/rollpe/*'],
     }]}})
 
