@@ -11,7 +11,7 @@ class AppLinkMetadataTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/json')
         self.assertEqual(response.json()['applinks']['details'], [{
-            'appID': '42NW282TDP.dev.hugesilver.Roll-Pe',
+            'appID': '42NW282TDP.dev.hugesilver.RollPe',
             'paths': ['/api/user/password-reset/*', '/rollpe/*'],
         }])
 
