@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>개인정보처리방침 · 롤페</title>
+  <style nonce="{{ csp_nonce }}">
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #fff; color: #181818; font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; font-size: 16px; line-height: 1.8; overflow-wrap: anywhere; }
+    main { width: 100%; max-width: 800px; margin: 0 auto; padding: 48px 24px 64px; }
+    h1 { margin: 0 0 32px; font-size: 28px; line-height: 1.4; }
+    h2 { margin: 40px 0 16px; font-size: 22px; line-height: 1.5; }
+    h3 { margin: 32px 0 12px; font-size: 19px; line-height: 1.5; }
+    p { margin: 12px 0; }
+    ul, ol { padding-left: 24px; }
+    li { margin: 8px 0; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>롤페 개인정보처리방침</h1>
+    {# Trusted server-owned HTML, shared with the existing policy API. #}
+    <article>{{ policy_html|safe }}</article>
+  </main>
+</body>
+</html>

@@ -19,8 +19,11 @@ from django.urls import path, include
 
 from paper.apis import QueryIndexAPI
 from user.app_links import apple_app_site_association, android_asset_links, rollpe_invitation_page
+from user.policy_views import privacy_policy
 
 urlpatterns = [
+    path('privacy-policy', privacy_policy, name='privacy_policy'),
+    path('privacy-policy/', privacy_policy),
     path('.well-known/apple-app-site-association', apple_app_site_association),
     path('.well-known/assetlinks.json', android_asset_links),
     path('rollpe/<uuid:code>', rollpe_invitation_page, name='rollpe_invitation'),
