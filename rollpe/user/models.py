@@ -160,3 +160,39 @@ class UserBlock(models.Model):
             models.UniqueConstraint(fields=['blocker', 'blocked'], name='unique_user_block'),
             models.CheckConstraint(condition=~models.Q(blocker=models.F('blocked')), name='prevent_self_block'),
         ]
+
+
+class ContentReport(BaseTimeModel):
+    class Target(models.TextChoices):
+        PAPER = 'paper', '롤페'
+        HEART = 'heart', '마음'
+
+    class Reason(models.TextChoices):
+        SPAM = 'spam', '스팸·광고'
+        ABUSE = 'abuse', '욕설·혐오·괴롭힘'
+        INAPPROPRIATE = 'inappropriate', '음란·불법·부적절한 내용'
+        OTHER = 'other', '기타'
+
+    class Status(models.TextChoices):
+        PENDING = 'pending', '접수'
+        RESOLVED = 'resolved', '처리 완료'
+        DISMISSED = 'dismissed', '반려'
+
+    reporterFK = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='content_reports')
+    reportedUserFK = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='received_reports')
+    paperFK = models.ForeignKey('paper.Paper', on_delete=models.SET_NULL, null=True)
+    heartFK = models.ForeignKey('heart.Heart', on_delete=models.SET_NULL, null=True)
+    targetType = models.CharField(max_length=5, choices=Target.choices)
+    targetCode = models.UUIDField()
+    reason = models.CharField(max_length=20, choices=Reason.choices)
+    description = models.TextField(max_length=500, blank=True)
+    # Keep the content as seen when reported, even after an edit or deletion. No credentials or contact details.
+    snapshot = models.JSONField(editable=False)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING, db_index=True)
+    staffNote = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = '콘텐츠 신고'
+        verbose_name_plural = '콘텐츠 신고'
+        ordering = ['-createdAt', '-pk']
+        constraints = [models.UniqueConstraint(fields=['reporterFK', 'targetType', 'targetCode'], name='unique_content_report')]
