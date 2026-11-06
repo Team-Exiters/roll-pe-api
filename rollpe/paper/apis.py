@@ -12,6 +12,7 @@ from paper.lifecycle import delivered_paper_filter, is_delivered
 from paper.invitations import accept_invitation
 from paper.capacity import capacity_error
 from user.models import User
+from user.blocking import blocked_ids, has_block, blocked_pair, locked_users
 from utils.response import Response
 from rest_framework.views import APIView
 
@@ -28,13 +29,13 @@ class UserPaperAPI(APIView):
 		# through the authenticated host/invitation lists and explicit entry links.
 		queryset = Paper.objects.filter(viewStat=True).exclude(delivered_paper_filter())
 		if request.user.is_authenticated:
-			queryset = queryset.exclude(blockedUsers=request.user)
+			queryset = queryset.exclude(blockedUsers=request.user).exclude(hostFK_id__in=blocked_ids(request.user))
 		queryset = queryset.order_by('-createdAt', '-pk')
 
 		# TODO hot한 롤페의 기준을 정해야 한다.
 		if type == "hot":
 			return Response(
-				data=UserShowPaperSerializer(queryset[:6], many=True, context={'listing': True}).data,
+				data=UserShowPaperSerializer(queryset[:6], many=True, context={'listing': True, 'request': request}).data,
 				status=status.HTTP_200_OK
 				)
 
@@ -43,7 +44,7 @@ class UserPaperAPI(APIView):
 
 		paginator = self.pagination_class()
 		page = paginator.paginate_queryset(queryset, request)  # <- 페이지 분할
-		serializer = UserShowPaperSerializer(page, many=True, context={'listing': True})
+		serializer = UserShowPaperSerializer(page, many=True, context={'listing': True, 'request': request})
 
 		return Response(
 			data=paginator.get_paginated_response(serializer.data).data,
@@ -131,7 +132,7 @@ class MyPagePaperAPI(APIView):
 				status=status.HTTP_400_BAD_REQUEST
 				)
 
-		query = (query.exclude(blockedUsers=user)
+		query = (query.exclude(blockedUsers=user).exclude(hostFK_id__in=blocked_ids(user))
 				 .select_related('hostFK', 'receiverFK', 'themeFK', 'sizeFK', 'ratioFK')
 				 .order_by('-createdAt', '-pk'))
 
@@ -144,7 +145,7 @@ class MyPagePaperAPI(APIView):
 
 		paginator = self.pagination_class()
 		page = paginator.paginate_queryset(query, request)  # <- 페이지 분할
-		serializer = UserShowPaperSerializer(page, many=True, context={'listing': True})
+		serializer = UserShowPaperSerializer(page, many=True, context={'listing': True, 'request': request})
 
 
 		return Response(
@@ -184,7 +185,7 @@ class PaperAPI(APIView):
 		except Paper.DoesNotExist as e:
 			return Response(msg=str(e), status=status.HTTP_404_NOT_FOUND)
 
-		if is_blocked_user(user, paper):
+		if is_blocked_user(user, paper) or has_block(user, paper.hostFK_id):
 			return Response(status=403, msg='이 롤페에 다시 참여할 수 없습니다.')
 
 		# Once delivered, host/writer membership and public visibility no longer grant access.
@@ -192,7 +193,7 @@ class PaperAPI(APIView):
 		can_read = paper.receiverFK_id == user.pk if delivered else is_invited_user(user=user, paper=paper)
 		if can_read:
 			return Response(
-				data=UserShowPaperSerializer(paper).data,
+				data=UserShowPaperSerializer(paper, context={'request': request}).data,
 				status=status.HTTP_200_OK
 				)
 		else:
@@ -268,11 +269,14 @@ class PaperSendAPI(APIView):
                 return Response(status=470 if paper.invitingUser.filter(pk=request.user.pk).exists() else 471)
             if paper.receiverFK_id is None or not User.objects.filter(pk=paper.receiverFK_id, is_active=True).exists():
                 return Response(status=400, msg='전달할 수신자를 확인해주세요.')
-            if paper.receivingStat != 1:
-                # Avoid Paper.save(), which rehashes an existing private-paper password.
-                Paper.objects.filter(pk=paper.pk).update(receivingStat=1, updatedAt=timezone.now())
-            return Response(status=200, msg='롤페를 전달하였습니다.',
-                            data={'code': str(paper.code), 'receivingStat': 1})
+            with locked_users(paper.hostFK_id, paper.receiverFK_id):
+                if blocked_pair(paper.hostFK_id, paper.receiverFK_id):
+                    return Response(status=403, msg='이 사용자에게 롤페를 전달할 수 없습니다.')
+                if paper.receivingStat != 1:
+                    # Avoid Paper.save(), which rehashes an existing private-paper password.
+                    Paper.objects.filter(pk=paper.pk).update(receivingStat=1, updatedAt=timezone.now())
+                return Response(status=200, msg='롤페를 전달하였습니다.',
+                                data={'code': str(paper.code), 'receivingStat': 1})
 
 
 class PaperEnterManageAPI(APIView):
@@ -289,29 +293,30 @@ class PaperEnterManageAPI(APIView):
                 return Response(status=400)
             except Paper.DoesNotExist:
                 return Response(status=404)
-            if is_blocked_user(request.user, paper):
-                return Response(status=403, msg='이 롤페에 다시 참여할 수 없습니다.')
-            if paper.invitingUser.filter(pk=request.user.pk).exists():
-                return Response(status=473)
-            if is_delivered(paper):
-                return Response(status=483)
-            invitation = PaperInvitation.objects.filter(paper=paper, user=request.user, status=PaperInvitation.Status.PENDING, paper__hostFK__is_active=True).first()
-            if invitation is not None:
-                error = accept_invitation(invitation)
+            with locked_users(request.user.pk, paper.hostFK_id):
+                if is_blocked_user(request.user, paper) or blocked_pair(request.user.pk, paper.hostFK_id):
+                    return Response(status=403, msg='이 롤페에 다시 참여할 수 없습니다.')
+                if paper.invitingUser.filter(pk=request.user.pk).exists():
+                    return Response(status=473)
+                if is_delivered(paper):
+                    return Response(status=483)
+                invitation = PaperInvitation.objects.filter(paper=paper, user=request.user, status=PaperInvitation.Status.PENDING, paper__hostFK__is_active=True).first()
+                if invitation is not None:
+                    error = accept_invitation(invitation)
+                    if error is not None:
+                        return error
+                    return Response(status=204)
+                if not paper.viewStat:
+                    password = request.data.get('password')
+                    if not isinstance(password, str) or not password:
+                        return Response(status=400)
+                    if not check_password(password, paper.password):
+                        return Response(status=472)
+                error = capacity_error(paper, request.user)
                 if error is not None:
                     return error
+                paper.invitingUser.add(request.user)
                 return Response(status=204)
-            if not paper.viewStat:
-                password = request.data.get('password')
-                if not isinstance(password, str) or not password:
-                    return Response(status=400)
-                if not check_password(password, paper.password):
-                    return Response(status=472)
-            error = capacity_error(paper, request.user)
-            if error is not None:
-                return error
-            paper.invitingUser.add(request.user)
-            return Response(status=204)
 
 
 class QueryIndexAPI(APIView):

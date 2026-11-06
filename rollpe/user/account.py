@@ -4,7 +4,7 @@ from django.db.models import Q
 
 from heart.models import Heart
 from paper.models import Paper, PaperInvitation
-from user.models import AppleAuthFlow, AppleCredential, SocialIdentity
+from user.models import AppleAuthFlow, AppleCredential, SocialIdentity, UserBlock
 
 
 def remove_account(user):
@@ -15,6 +15,7 @@ def remove_account(user):
         user.delete()
         return
 
+    UserBlock.objects.filter(blocker=user).delete()
     AppleAuthFlow.objects.filter(user=user).delete()
     AppleCredential.objects.filter(user=user).delete()
     SocialIdentity.objects.filter(user=user).delete()

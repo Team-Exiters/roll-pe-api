@@ -3,6 +3,7 @@ from django.utils.timezone import localtime
 
 from heart.models import Heart, HeartRevision
 from user.serializers import UserViewSerializer
+from user.blocking import blocked_ids
 
 
 class HeartReadSerializer(serializers.ModelSerializer):
@@ -23,6 +24,19 @@ class HeartReadSerializer(serializers.ModelSerializer):
         kwargs.pop('is_public', None)
         kwargs.pop('my_pk', None)
         super().__init__(*args, **kwargs)
+
+    def to_representation(self, instance):
+        request = self.context.get('request')
+        if request is not None:
+            if 'blocked_ids' not in self.context:
+                self.context['blocked_ids'] = set(blocked_ids(request.user))
+            if instance.userFK_id in self.context['blocked_ids']:
+                # Retain occupancy without sending the memo, display name or revision history.
+                return {'id': instance.pk, 'code': str(instance.code), 'index': instance.location,
+                        'author': {'id': instance.userFK_id, 'name': '차단한 사용자', 'identifyCode': '', 'provider': None},
+                        'content': '', 'color': 'EEEEEE', 'createdAt': self.get_createdAt(instance),
+                        'version': '', 'revisionCount': 0, 'hidden': True}
+        return super().to_representation(instance)
 
     def get_createdAt(self, obj):
         return localtime(obj.createdAt).strftime('%Y.%m.%d')

@@ -10,11 +10,12 @@ from paper.models import Paper, QueryIndexTable
 from paper.lifecycle import delivered_paper_filter, is_delivered
 from paper.capacity import capacity_error
 from utils.response import Response
+from user.blocking import blocked_ids, has_block
 from utils.share.functions import is_invited_user, is_valid_uuid, is_host, is_blocked_user
 
 
 def can_read(paper, user):
-    if is_blocked_user(user, paper):
+    if is_blocked_user(user, paper) or has_block(user, paper.hostFK_id):
         return False
     if is_delivered(paper):
         return paper.receiverFK_id == user.pk
@@ -22,7 +23,7 @@ def can_read(paper, user):
 
 
 def mutation_error(paper, user, data=None):
-    if is_blocked_user(user, paper):
+    if is_blocked_user(user, paper) or has_block(user, paper.hostFK_id):
         return Response(status=403, msg='이 롤페에 다시 참여할 수 없습니다.')
     if not paper.viewStat and not is_invited_user(user, paper):
         return Response(status=471)
@@ -56,9 +57,11 @@ class HeartAPI(APIView):
             heart = Heart.objects.select_related('paperFK').filter(code=hcode).first()
             if heart is None:
                 return Response(status=404)
+            if has_block(request.user, heart.userFK_id):
+                return Response(status=403)
             if not can_read(heart.paperFK, request.user):
                 return Response(status=471)
-            return Response(data=HeartReadSerializer(heart).data, status=200)
+            return Response(data=HeartReadSerializer(heart, context={'request': request}).data, status=200)
         paper = Paper.objects.filter(code=pcode).first()
         if paper is None:
             return Response(status=404)
@@ -67,7 +70,7 @@ class HeartAPI(APIView):
         hearts = Heart.objects.filter(paperFK=paper).order_by('createdAt')
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(hearts, request)
-        return Response(data=paginator.get_paginated_response(HeartReadSerializer(page, many=True).data).data, status=200)
+        return Response(data=paginator.get_paginated_response(HeartReadSerializer(page, many=True, context={'request': request}).data).data, status=200)
 
     def post(self, request):
         if not request.user.is_authenticated:
@@ -95,7 +98,7 @@ class HeartAPI(APIView):
             if color is None:
                 return Response(status=480)
             heart = serializer.save(userFK=request.user, paperFK=paper, colorFK=color)
-            return Response(data=HeartReadSerializer(heart).data, status=201)
+            return Response(data=HeartReadSerializer(heart, context={'request': request}).data, status=201)
 
     def patch(self, request):
         if not request.user.is_authenticated:
@@ -122,7 +125,7 @@ class HeartAPI(APIView):
             if color is None:
                 return Response(status=480)
             heart = serializer.update(heart, {**data, 'colorFK': color})
-            return Response(data=HeartReadSerializer(heart).data, status=200)
+            return Response(data=HeartReadSerializer(heart, context={'request': request}).data, status=200)
 
     def delete(self, request):
         if not request.user.is_authenticated:
@@ -156,7 +159,7 @@ def get_my_heart_list(request):
     # Authorship does not retain access to a paper after it has been delivered.
     heart_instance_list = (Heart.objects.filter(userFK=request.user)
                            .filter(Q(paperFK__receiverFK=request.user) | ~delivered_paper_filter('paperFK__'))
-                           .exclude(paperFK__blockedUsers=request.user).order_by('-createdAt', '-pk'))
+                           .exclude(paperFK__blockedUsers=request.user).exclude(paperFK__hostFK_id__in=blocked_ids(request.user)).order_by('-createdAt', '-pk'))
     
     pagination_class = PageNumberPagination
     paginator = pagination_class()

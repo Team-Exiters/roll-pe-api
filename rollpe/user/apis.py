@@ -27,6 +27,7 @@ from user.models import User
 from user.apple_sessions import credential_for_token, revoke_apple_credentials
 from user.authentication import RollpeTokenRefreshSerializer
 from user.account import remove_account
+from user.blocking import blocked_ids, related_block_ids
 
 from paper.models import Paper
 
@@ -261,7 +262,7 @@ def myid_in_invate_rollpe_api(request):
     user = request.user
 
     # invitingUser에 현재 사용자(user)가 포함된 Papers 조회
-    papers = Paper.objects.filter(invitingUser=user).distinct()
+    papers = Paper.objects.filter(invitingUser=user).exclude(hostFK_id__in=blocked_ids(user)).distinct()
     
     data = {
         "count": papers.count(),
@@ -284,7 +285,7 @@ def receiver_is_me_api(request):
     user = request.user
         
     # receiverFK_id가 현재 사용자(user)의 ID인 Papers 조회
-    papers = Paper.objects.filter(receiverFK=user).distinct()
+    papers = Paper.objects.filter(receiverFK=user).exclude(hostFK_id__in=blocked_ids(user)).distinct()
     
     data = {
         "count": papers.count(),
@@ -312,7 +313,7 @@ def search_user_name(request):
     if not user_name_code:
         return Response(msg="검색어가 필요합니다.", status=400)
 
-    users = User.objects.filter(Q(name__icontains=user_name_code) | Q(provider__icontains=user_name_code), is_active=True)
+    users = User.objects.filter(Q(name__icontains=user_name_code) | Q(provider__icontains=user_name_code), is_active=True).exclude(pk__in=related_block_ids(request.user)).order_by('name', 'pk')
     if not users:
         return Response(msg="사용자를 찾을 수 없습니다.",status=404)
     
