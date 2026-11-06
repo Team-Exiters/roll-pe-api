@@ -5,8 +5,10 @@ from .apis_social import social_login, KakaoLoginView, GoogleLoginView
 from .apple_browser import apple_start, apple_callback, apple_exchange
 from .social_browser import social_start, social_callback, social_exchange
 from .password_reset_views import password_reset_page
+from .blocking import UserBlocksAPI
 
 urlpatterns = [
+    path('/blocks', UserBlocksAPI.as_view(), name='user_blocks'),
     path('/password-reset/<str:identify_code>', password_reset_page, name='password_reset_page'),
     # path('signin', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('/signin', CustomTokenObtainPairAPI.as_view(), name='token_obtain_pair'),

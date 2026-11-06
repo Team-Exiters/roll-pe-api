@@ -6,6 +6,7 @@ from paper.models import Paper
 from paper.lifecycle import delivered_paper_filter
 from paper.serializer import UserShowPaperSerializer
 from utils.response import Response
+from user.blocking import blocked_ids
 
 
 class SearchAPI(APIView):
@@ -20,12 +21,12 @@ class SearchAPI(APIView):
 
 		queryset = Paper.objects.filter(viewStat=True, title__icontains=keyword.strip()).exclude(
 			delivered_paper_filter()
-		).exclude(blockedUsers=request.user).select_related(
+		).exclude(blockedUsers=request.user).exclude(hostFK_id__in=blocked_ids(request.user)).select_related(
 			'hostFK', 'receiverFK', 'themeFK', 'sizeFK', 'ratioFK'
 		).order_by('-createdAt', '-pk')
 
 		paginator = self.pagination_class()
 		page = paginator.paginate_queryset(queryset, request)  # <- 페이지 분할
-		serializer = UserShowPaperSerializer(page, many=True, context={'listing': True})
+		serializer = UserShowPaperSerializer(page, many=True, context={'listing': True, 'request': request})
 
 		return Response(data=paginator.get_paginated_response(serializer.data).data, status=status.HTTP_200_OK)

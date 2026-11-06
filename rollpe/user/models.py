@@ -148,3 +148,15 @@ class SocialAuthFlow(models.Model):
     status = models.CharField(max_length=16, default='pending')
     exchange_hash = models.CharField(max_length=64, null=True, unique=True)
     identity = models.ForeignKey(SocialIdentity, null=True, on_delete=models.CASCADE)
+
+
+class UserBlock(models.Model):
+    blocker = models.ForeignKey(User, related_name='blocked_users', on_delete=models.CASCADE)
+    blocked = models.ForeignKey(User, related_name='blocked_by', on_delete=models.CASCADE)
+    createdAt = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['blocker', 'blocked'], name='unique_user_block'),
+            models.CheckConstraint(condition=~models.Q(blocker=models.F('blocked')), name='prevent_self_block'),
+        ]

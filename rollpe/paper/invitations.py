@@ -11,32 +11,42 @@ from paper.lifecycle import delivered_paper_filter, is_delivered
 from paper.capacity import capacity_error
 from paper.models import Paper, PaperInvitation
 from utils.response import Response
+from user.blocking import blocked_pair, related_block_ids, locked_users
 from utils.share.functions import is_blocked_user
 
 
 def invite_user(paper, user):
     """Caller holds the paper lock; an existing membership is never changed."""
-    if user.pk == paper.hostFK_id or paper.invitingUser.filter(pk=user.pk).exists():
-        return Response(status=409, data={'reason': 'alreadyMember'})
-    invitation, created = PaperInvitation.objects.get_or_create(paper=paper, user=user)
-    if not created and invitation.status != PaperInvitation.Status.PENDING:
-        # A new invitation gets a new identity, so an old response cannot settle it.
-        invitation.code = uuid.uuid4()
-        invitation.status = PaperInvitation.Status.PENDING
-        invitation.respondedAt = None
-        invitation.save(update_fields=['code', 'status', 'respondedAt', 'updatedAt'])
-    return Response(status=204)
+    with locked_users(paper.hostFK_id, user.pk):
+        if blocked_pair(paper.hostFK_id, user.pk):
+            return Response(status=403, data={'reason': 'userBlocked'})
+        if user.pk == paper.hostFK_id or paper.invitingUser.filter(pk=user.pk).exists():
+            return Response(status=409, data={'reason': 'alreadyMember'})
+        invitation, created = PaperInvitation.objects.get_or_create(paper=paper, user=user)
+        if not created and invitation.status != PaperInvitation.Status.PENDING:
+            # A new invitation gets a new identity, so an old response cannot settle it.
+            invitation.code = uuid.uuid4()
+            invitation.status = PaperInvitation.Status.PENDING
+            invitation.respondedAt = None
+            invitation.save(update_fields=['code', 'status', 'respondedAt', 'updatedAt'])
+        return Response(status=204)
 
 
 def accept_invitation(invitation):
     """Caller holds the paper lock, shared by membership, delivery and deletion."""
-    error = capacity_error(invitation.paper, invitation.user)
-    if error is not None:
-        return error
-    invitation.paper.invitingUser.add(invitation.user)
-    invitation.status = PaperInvitation.Status.ACCEPTED
-    invitation.respondedAt = timezone.now()
-    invitation.save(update_fields=['status', 'respondedAt', 'updatedAt'])
+    with locked_users(invitation.paper.hostFK_id, invitation.user_id):
+        if blocked_pair(invitation.paper.hostFK_id, invitation.user_id):
+            return Response(status=403, data={'reason': 'userBlocked'})
+        invitation.refresh_from_db(fields=['status'])
+        if invitation.status != PaperInvitation.Status.PENDING:
+            return Response(status=409)
+        error = capacity_error(invitation.paper, invitation.user)
+        if error is not None:
+            return error
+        invitation.paper.invitingUser.add(invitation.user)
+        invitation.status = PaperInvitation.Status.ACCEPTED
+        invitation.respondedAt = timezone.now()
+        invitation.save(update_fields=['status', 'respondedAt', 'updatedAt'])
 
 
 class InvitationResponseInput(serializers.Serializer):
@@ -52,6 +62,7 @@ class PaperInvitationsAPI(APIView):
                                                paper__hostFK__is_active=True)
                  .exclude(paper__in=Paper.objects.filter(delivered_paper_filter()))
                  .exclude(paper__blockedUsers=request.user)
+                 .exclude(paper__hostFK_id__in=related_block_ids(request.user))
                  .exclude(paper__invitingUser=request.user)
                  .select_related('paper__hostFK', 'paper__themeFK')
                  .order_by('-updatedAt', '-pk'))

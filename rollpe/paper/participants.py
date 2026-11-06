@@ -8,6 +8,7 @@ from paper.lifecycle import is_delivered
 from paper.invitations import invite_user
 from paper.models import Paper
 from user.models import User
+from user.blocking import blocked_ids
 from user.serializers import UserViewSerializer
 from utils.response import Response
 from utils.share.functions import is_blocked_user
@@ -53,14 +54,15 @@ class PaperParticipantsAPI(APIView):
             return error
         hearts = {heart.userFK_id: heart for heart in Heart.objects.filter(paperFK=paper)}
         ids = set(paper.invitingUser.values_list('pk', flat=True)) | set(hearts) | {paper.hostFK_id}
+        hidden = set(blocked_ids(request.user))
         users = User.objects.filter(pk__in=ids, is_active=True).exclude(blocked_papers=paper).order_by('name', 'id')
         return Response(status=200, data={'users': [{
             **UserViewSerializer(user).data,
             'isHost': user.pk == paper.hostFK_id,
             'isReceiver': user.pk == paper.receiverFK_id,
             'hasWritten': user.pk in hearts,
-            'revisionCount': hearts[user.pk].revisionCount if user.pk in hearts else 0,
-            'heartCode': str(hearts[user.pk].code) if user.pk in hearts else None,
+            'revisionCount': hearts[user.pk].revisionCount if user.pk in hearts and user.pk not in hidden else 0,
+            'heartCode': str(hearts[user.pk].code) if user.pk in hearts and user.pk not in hidden else None,
         } for user in users]})
 
     def post(self, request):

@@ -9,6 +9,7 @@ from heart.serializers import HeartReadSerializer
 from paper.models import Paper, QueryIndexTable
 from paper.lifecycle import KOREA
 from user.serializers import UserViewSerializer
+from user.blocking import blocked_ids, blocked_pair
 
 
 class UserShowPaperSerializer(serializers.ModelSerializer):
@@ -70,7 +71,7 @@ class UserShowPaperSerializer(serializers.ModelSerializer):
 		hearts = Heart.objects.filter(paperFK=paper)
 		if self.context.get('listing'):
 			return {'count': hearts.count()}
-		serializer = HeartReadSerializer(hearts, many=True)
+		serializer = HeartReadSerializer(hearts, many=True, context=self.context)
 
 		if len(serializer.data) == 0:
 			return {"count": 0}
@@ -83,7 +84,11 @@ class UserShowPaperSerializer(serializers.ModelSerializer):
 	def get_invitingUser(self, paper):
 		if self.context.get('listing') or not paper.invitingUser:
 			return []
-		return UserViewSerializer(paper.invitingUser.all(), many=True).data
+		users = paper.invitingUser.all()
+		request = self.context.get('request')
+		if request is not None:
+			users = users.exclude(pk__in=blocked_ids(request.user))
+		return UserViewSerializer(users, many=True).data
 
 
 class PaperCreateSerializer(serializers.ModelSerializer):
@@ -121,6 +126,9 @@ class PaperCreateSerializer(serializers.ModelSerializer):
 
 	def validate(self, attrs):
 		receiverFK = attrs.get('receiverFK')
+		request = self.context.get('request')
+		if receiverFK and request and blocked_pair(request.user.pk, receiverFK.pk):
+			raise serializers.ValidationError('이 사용자에게 롤페를 전달할 수 없습니다.')
 		receiverName = attrs.get('receiverName')
 		receiverTel = attrs.get('receiverTel')
 

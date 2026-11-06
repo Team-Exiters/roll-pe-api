@@ -3,6 +3,7 @@ from rest_framework.views import APIView
 from heart.apis import can_read
 from heart.models import Heart
 from user.serializers import UserViewSerializer
+from user.blocking import has_block
 from utils.response import Response
 from utils.share.functions import is_valid_uuid
 
@@ -17,7 +18,7 @@ class HeartRevisionsAPI(APIView):
         heart = Heart.objects.select_related('paperFK').filter(code=code).first()
         if heart is None:
             return Response(status=404)
-        if not can_read(heart.paperFK, request.user):
+        if has_block(request.user, heart.userFK_id) or not can_read(heart.paperFK, request.user):
             return Response(status=403)
         if request.user.pk not in (heart.userFK_id, heart.paperFK.hostFK_id):
             return Response(status=403)
