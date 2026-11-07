@@ -2,6 +2,7 @@ import uuid
 
 from django.db.models import Q
 
+from engine.models import Inquiry
 from heart.models import Heart
 from paper.models import Paper, PaperInvitation
 from user.models import AppleAuthFlow, AppleCredential, SocialIdentity, UserBlock
@@ -15,6 +16,7 @@ def remove_account(user):
         user.delete()
         return
 
+    Inquiry.objects.filter(userFK=user).delete()
     UserBlock.objects.filter(blocker=user).delete()
     AppleAuthFlow.objects.filter(user=user).delete()
     AppleCredential.objects.filter(user=user).delete()
