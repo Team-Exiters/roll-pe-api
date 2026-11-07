@@ -8,7 +8,7 @@ from rest_framework.views import APIView
 from heart.apis import can_read
 from heart.models import Heart
 from paper.models import Paper
-from user.blocking import has_block
+from user.blocking import blocked_ids, has_block
 from user.models import ContentReport
 from utils.response import Response
 
@@ -30,6 +30,19 @@ def heart_snapshot(heart):
             'content': heart.context, 'color': heart.colorFK.name, 'revisionCount': heart.revisionCount}
 
 
+def content_snapshot(paper, heart, viewer):
+    snapshot = {'title': paper.title, 'paperCode': str(paper.code)}
+    if heart is not None:
+        snapshot['heart'] = heart_snapshot(heart)
+    else:
+        # Paper reports include only memos visible to the reporter.
+        hearts = (Heart.objects.filter(paperFK=paper)
+                  .exclude(userFK_id__in=blocked_ids(viewer))
+                  .select_related('colorFK').order_by('location', 'pk'))
+        snapshot['hearts'] = [heart_snapshot(item) for item in hearts]
+    return snapshot
+
+
 class ContentReportsAPI(APIView):
     def post(self, request):
         if not request.user.is_authenticated:
@@ -44,11 +57,14 @@ class ContentReportsAPI(APIView):
         data = serializer.validated_data
         code = data['targetCode']
         heart_target = data['targetType'] == ContentReport.Target.HEART
-        paper_id = Heart.objects.filter(code=code).values_list('paperFK_id', flat=True).first() if heart_target else None
+        if heart_target:
+            paper_id = Heart.objects.filter(code=code).values_list('paperFK_id', flat=True).first()
+            paper_filter = {'pk': paper_id}
+        else:
+            paper_filter = {'code': code}
         # Share the parent lock with edits, deletion and delivery so evidence matches visible content.
         with transaction.atomic():
-            papers = Paper.objects.select_for_update()
-            paper = (papers.filter(pk=paper_id) if heart_target else papers.filter(code=code)).first()
+            paper = Paper.objects.select_for_update().filter(**paper_filter).first()
             if paper is None:
                 return Response(status=404)
             if not can_read(paper, request.user):
@@ -61,19 +77,14 @@ class ContentReportsAPI(APIView):
                 return Response(status=403)
             if author_id == request.user.pk:
                 return Response(status=400, msg='본인의 콘텐츠는 신고할 수 없습니다.')
-            snapshot = {'title': paper.title, 'paperCode': str(paper.code)}
-            if heart is not None:
-                snapshot['heart'] = heart_snapshot(heart)
-            else:
-                # A paper report may concern its memos. Exclude content this viewer has blocked.
-                from user.blocking import blocked_ids
-                snapshot['hearts'] = [heart_snapshot(item) for item in
-                                      Heart.objects.filter(paperFK=paper).exclude(userFK_id__in=blocked_ids(request.user))
-                                      .select_related('colorFK').order_by('location', 'pk')]
             _, created = ContentReport.objects.get_or_create(
                 reporterFK=request.user, targetType=data['targetType'], targetCode=code,
-                defaults={'reportedUserFK_id': author_id, 'paperFK': paper, 'heartFK': heart,
-                          'reason': data['reason'], 'description': data.get('description', ''), 'snapshot': snapshot},
+                defaults={
+                    'reportedUserFK_id': author_id, 'paperFK': paper, 'heartFK': heart,
+                    'reason': data['reason'], 'description': data.get('description', ''),
+                    # Defaults are evaluated only for a new report, while holding the paper lock.
+                    'snapshot': lambda: content_snapshot(paper, heart, request.user),
+                },
             )
         return Response(status=201 if created else 200,
                         msg='신고가 접수되었습니다.' if created else '이미 신고가 접수된 콘텐츠입니다.',
