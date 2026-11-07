@@ -206,8 +206,10 @@ curl -i https://rollpe.mooo.com/.well-known/assetlinks.json
 - 공개 카드 목록에서는 마음 본문과 참여자 명단을 반환하지 않습니다. 상세 조회와 이력 조회의 접근 검사를 목록으로 우회할 수 없도록 합니다.
 - 서버 배포 시 `python manage.py migrate`로 `paper.0005_participants_and_heart_history`, `heart.0004_participants_and_heart_history`를 적용한 뒤 Gunicorn을 다시 로드합니다. 새 환경변수나 외부 서비스 설정은 필요하지 않습니다.
 
-## 1:1 문의
+## 1:1 문의와 공지사항
 
 - `POST /api/engine/inquiries`: 문의유형(`bug`, `suggestion`, `other`)·본문(최대 2,000자)을 접수합니다. 작성자와 답변용 이메일은 서버가 로그인한 계정에서 연결하며, 클라이언트의 이메일 입력값은 사용하지 않습니다. 이메일이 없는 기존 계정도 문의를 접수할 수 있습니다. `requestId` UUID가 같으면 기존 접수 결과를 반환하며 내용을 덮어쓰지 않습니다. 문의 내역은 앱 API로 공개하지 않습니다.
 - Django 관리자의 **1:1 문의**에서 접수 내용을 확인하고 계정 이메일로 별도 답변한 뒤 **처리 완료**로 변경합니다. 관리자 저장만으로 답변 메일이 자동 발송되지는 않습니다. 회원탈퇴 시 문의의 이메일·본문도 삭제합니다.
-- 배포 시 `python manage.py migrate`로 `engine.0002_inquiry`를 적용한 뒤 서버를 재시작합니다. 추가 환경변수는 없습니다.
+- `GET /api/engine/notices`, `GET /api/engine/notices/<id>`: 게시 여부가 켜져 있고 게시 시각이 지난 공지만 최신순으로 공개합니다. 관리자 **공지사항**에서 제목·HTML 본문·게시 일시를 관리합니다.
+- 본문은 문단·제목·목록·링크·표를 지원하며, 실행 가능한 HTML과 안전하지 않은 링크는 `nh3`로 제거합니다.
+- 배포 시 `pip install -r requirements.txt`와 `python manage.py migrate`로 `engine.0002_inquiry`와 `engine.0003_notice`를 적용한 뒤 서버를 재시작합니다. 추가 환경변수는 없습니다.

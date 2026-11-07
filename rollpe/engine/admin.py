@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from engine.models import Inquiry
+from engine.models import Inquiry, Notice
 
 
 @admin.register(Inquiry)
@@ -13,3 +13,12 @@ class InquiryAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return False
+
+
+@admin.register(Notice)
+class NoticeAdmin(admin.ModelAdmin):
+    list_display = ('title', 'isPublished', 'publishedAt', 'updatedAt')
+    list_filter = ('isPublished',)
+    search_fields = ('title', 'body')
+    fields = ('title', 'body', 'isPublished', 'publishedAt', 'createdAt', 'updatedAt')
+    readonly_fields = ('createdAt', 'updatedAt')

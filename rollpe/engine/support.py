@@ -1,13 +1,17 @@
 import math
 
 from django.db import transaction
+from django.core.exceptions import ValidationError
+from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.utils.decorators import method_decorator
 from rest_framework import serializers
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
-from engine.models import Inquiry
+from engine.models import Inquiry, Notice
+from engine.notice_html import clean_notice_html
 from user.models import User
 from utils.response import Response
 
@@ -45,3 +49,39 @@ class InquiriesAPI(APIView):
                                     data={'retryAfter': math.ceil(throttle.wait() or 60)})
                 Inquiry.objects.create(userFK=user, email=user.email or '', **data)
         return Response(status=200 if existing else 201, data={'received': True})
+
+
+def published_notices():
+    return Notice.objects.filter(isPublished=True, publishedAt__lte=timezone.now())
+
+
+def notice_summary(notice):
+    return {
+        'id': notice.pk,
+        'title': notice.title,
+        'publishedAt': notice.publishedAt.isoformat(),
+        'updatedAt': notice.updatedAt.isoformat(),
+    }
+
+
+class NoticesAPI(APIView):
+    def get(self, request):
+        paginator = PageNumberPagination()
+        page = paginator.paginate_queryset(
+            published_notices().only('id', 'title', 'publishedAt', 'updatedAt'), request,
+        )
+        items = [notice_summary(notice) for notice in page]
+        return Response(status=200, data=paginator.get_paginated_response(items).data)
+
+
+class NoticeAPI(APIView):
+    def get(self, request, pk):
+        notice = published_notices().filter(pk=pk).first()
+        if notice is None:
+            return Response(status=404)
+        try:
+            body = clean_notice_html(notice.body)
+        except ValidationError:
+            # Imported data may bypass the admin's validation; do not render an empty notice.
+            return Response(status=404)
+        return Response(status=200, data={**notice_summary(notice), 'body': body})

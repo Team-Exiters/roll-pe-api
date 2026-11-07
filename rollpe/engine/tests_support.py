@@ -1,14 +1,18 @@
 import uuid
+from datetime import timedelta
 
 from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
+from django.core.exceptions import ValidationError
 from django.urls import reverse
+from django.utils import timezone
 from model_bakery import baker
 from rest_framework.test import APITestCase
 
 from engine.admin import InquiryAdmin
-from engine.models import Inquiry
+from engine.models import Inquiry, Notice
+from engine.notice_html import clean_notice_html
 from paper.models import Paper
 from user.account import remove_account
 
@@ -72,3 +76,50 @@ class InquiryTests(APITestCase):
         model_admin = InquiryAdmin(Inquiry, admin.site)
         self.assertIn('content', model_admin.readonly_fields)
         self.assertFalse(model_admin.has_add_permission(None))
+
+
+class NoticeTests(APITestCase):
+    def setUp(self):
+        self.notice = Notice.objects.create(title='서비스 안내', body='<p>안녕하세요.</p>', isPublished=True)
+
+    def test_public_list_is_newest_first_and_hides_drafts_scheduled_posts_and_body(self):
+        Notice.objects.create(title='초안', body='<p>초안 본문</p>')
+        future = Notice.objects.create(title='예약', body='<p>예약 본문</p>', isPublished=True,
+                                       publishedAt=timezone.now() + timedelta(days=1))
+        newest = Notice.objects.create(title='새 공지', body='<p>새 공지 본문</p>', isPublished=True)
+        response = self.client.get('/api/engine/notices')
+        self.assertEqual(response.status_code, 200)
+        items = response.json()['data']['results']
+        self.assertEqual([item['id'] for item in items], [newest.pk, self.notice.pk])
+        self.assertNotIn('body', items[0])
+        self.assertEqual(self.client.get(f'/api/engine/notices/{future.pk}').status_code, 404)
+        self.notice.isPublished = False
+        self.notice.save()
+        self.assertEqual(self.client.get(f'/api/engine/notices/{self.notice.pk}').status_code, 404)
+
+    def test_html_keeps_formatting_but_removes_active_content_and_unsafe_links(self):
+        self.notice.body = ('<h2>제목</h2><p onclick="alert(1)">내용 <strong>강조</strong></p>'
+                            '<script>secret()</script><iframe src="https://example.com"></iframe>'
+                            '<a href="javascript:alert(1)">위험 링크</a><a href="/admin">내부 링크</a>'
+                            '<a href="https://example.com/help">안내</a>')
+        self.notice.save()
+        html = self.client.get(f'/api/engine/notices/{self.notice.pk}').json()['data']['body']
+        self.assertIn('<strong>강조</strong>', html)
+        self.assertIn('href="https://example.com/help"', html)
+        self.assertIn('target="_blank"', html)
+        for forbidden in ['onclick', '<script', 'secret()', '<iframe', 'javascript:', 'href="/admin"']:
+            self.assertNotIn(forbidden, html)
+        with self.assertRaises(ValidationError):
+            clean_notice_html('<script>onlyScript()</script>')
+
+    def test_admin_clean_sanitizes_body_and_app_cannot_publish(self):
+        self.notice.body = '<p onclick="evil()">안내</p>'
+        self.notice.full_clean()
+        self.assertEqual(self.notice.body, '<p>안내</p>')
+        self.assertEqual(self.client.post('/api/engine/notices', {}).status_code, 405)
+
+    def test_invalid_imported_html_is_unavailable_instead_of_a_server_error(self):
+        for body in ('', '<script>onlyScript()</script>', '<p>&nbsp;</p>'):
+            Notice.objects.filter(pk=self.notice.pk).update(body=body)
+            response = self.client.get(f'/api/engine/notices/{self.notice.pk}')
+            self.assertEqual(response.status_code, 404)
