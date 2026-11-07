@@ -1,16 +1,17 @@
 import uuid
+from unittest.mock import patch
 
 from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.urls import reverse
-from model_bakery import baker
 
 from heart.models import Heart
 from paper.models import Paper
 from paper.tests_participants import PaperParticipantsFixture
 from user.admin import ContentReportAdmin
 from user.models import ContentReport, UserBlock
+from user.reports import content_snapshot
 
 
 class ContentReportsTests(PaperParticipantsFixture):
@@ -67,6 +68,14 @@ class ContentReportsTests(PaperParticipantsFixture):
         self.assertEqual(report.reportedUserFK, self.host)
         self.assertEqual(report.snapshot, {'title': self.paper.title, 'paperCode': str(self.paper.code), 'hearts': []})
         self.assertIsNone(report.heartFK)
+
+    def test_repeated_paper_reports_do_not_read_or_rebuild_memo_evidence(self):
+        self.client.force_authenticate(self.writer)
+        with patch('user.reports.content_snapshot', wraps=content_snapshot) as snapshot:
+            self.assertEqual(self.report(targetType='paper', targetCode=str(self.paper.code)).status_code, 201)
+            self.assertEqual(self.report(targetType='paper', targetCode=str(self.paper.code)).status_code, 200)
+        self.assertEqual(snapshot.call_count, 1)
+        self.assertEqual(ContentReport.objects.get().snapshot['hearts'][0]['content'], '원래 마음')
 
     def test_only_delivered_receiver_can_report_after_delivery(self):
         Paper.objects.filter(pk=self.paper.pk).update(receivingStat=1)
@@ -143,7 +152,7 @@ class ContentReportsTests(PaperParticipantsFixture):
 
     def test_staff_can_review_reports_but_users_cannot_access_admin(self):
         self.report()
-        moderator = baker.make(get_user_model(), is_staff=True, is_superuser=True, is_active=True)
+        moderator = get_user_model().objects.create_superuser(email='moderator@example.test')
         self.client.force_login(moderator)
         url = reverse('admin:user_contentreport_changelist')
         response = self.client.get(url)
@@ -157,3 +166,13 @@ class ContentReportsTests(PaperParticipantsFixture):
         self.client.logout()
         self.client.force_login(self.other)
         self.assertEqual(self.client.get(url).status_code, 302)
+
+    def test_superuser_creation_rejects_missing_admin_privileges(self):
+        users = get_user_model().objects
+        for flag in ('is_staff', 'is_superuser'):
+            with self.subTest(flag=flag), self.assertRaises(ValueError):
+                users.create_superuser(email='invalid-admin@example.test', **{flag: False})
+        self.assertFalse(users.filter(email='invalid-admin@example.test').exists())
+        user = users.create_user(email='ordinary-user@example.test')
+        self.assertFalse(user.is_staff)
+        self.assertFalse(user.is_superuser)

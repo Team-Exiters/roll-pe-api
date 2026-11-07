@@ -23,11 +23,11 @@ class UserManager(BaseUserManager):
         return user
     
     def create_superuser(self, email, password=None, **extra_fields):
-        
-        # extra_fields.setdefault('is_staff', True)
+        extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
-        # extra_fields.setdefault('user_role', 2)
-        
+        for flag in ('is_staff', 'is_superuser'):
+            if extra_fields[flag] is not True:
+                raise ValueError(f'Superuser must have {flag}=True.')
         return self.create_user(email, password, **extra_fields)
 
 class User(AbstractBaseUser, PermissionsMixin, BaseTimeModel):
